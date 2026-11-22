@@ -26,8 +26,8 @@ Please make sure to read and understand the following license:
 Cannot remap modifiers because it does not exist in any of the targets [] or their parents.
 
 > Task :compileJava NO-SOURCE
-> Task :processIncludeJars
 > Task :processClientResources
+> Task :processIncludeJars
 > Task :processTestResources NO-SOURCE
 > Task :validateAccessWidener NO-SOURCE
 > Task :sourcesJar
@@ -45,6 +45,6 @@ Cannot remap modifiers because it does not exist in any of the targets [] or the
 > Task :assemble
 > Task :build
 
-BUILD SUCCESSFUL in 1m 3s
+BUILD SUCCESSFUL in 58s
 8 actionable tasks: 8 executed
 Configuration cache entry stored.
