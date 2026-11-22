@@ -1,5 +1,7 @@
 package ru.incremental.screen;
 
+import java.util.List;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -12,13 +14,14 @@ import ru.incremental.tas.IncrementalConfig;
 import ru.incremental.tas.TasKey;
 
 /**
- * One row of the key binding list: shows the action, captures the key the user presses and reports
- * conflicts. Implemented as a widget (instead of hand-rolled hit testing) because a screen routes a
- * click to the child widget that is under the cursor, and anything else would be swallowed before
- * the screen ever sees it.
+ * One row of the key binding list: the action name on the left, the current key on the right.
+ *
+ * <p>Implemented as a widget instead of hand-rolled hit testing, because a screen hands a click to
+ * the child widget under the cursor and swallows it before the screen itself would see it. The row
+ * also draws its own background, so the screen must not paint anything over it afterwards.</p>
  */
 public class BindingRow extends AbstractWidget {
-	/** Set while this row waits for a key press. */
+	/** The row that currently waits for a key press, if any. */
 	private static BindingRow capturing;
 
 	private final TasConfigScreen screen;
@@ -39,6 +42,10 @@ public class BindingRow extends AbstractWidget {
 		return capturing == this;
 	}
 
+	public static boolean anyCapture() {
+		return capturing != null;
+	}
+
 	public static void cancelCapture() {
 		capturing = null;
 	}
@@ -50,18 +57,37 @@ public class BindingRow extends AbstractWidget {
 
 	@Override
 	protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-		// The row background is drawn by the screen; only the right-hand binding box is drawn here.
-		int boxWidth = 112;
-		int boxX = getX() + getWidth() - boxWidth;
+		boolean hovered = isHoveredOrFocused();
 		boolean active = isCapturing();
 		boolean error = System.currentTimeMillis() < errorUntil;
-		graphics.fill(boxX, getY() + 1, boxX + boxWidth, getY() + 21, active ? 0xFF4A3F1F : 0xFF232833);
-		Component label = active
-				? Component.translatable("incremental.msg.press_key").withStyle(net.minecraft.ChatFormatting.YELLOW)
-				: error ? Component.translatable("incremental.msg.key_taken").withStyle(net.minecraft.ChatFormatting.RED)
-				: TasKey.describe(key);
-		graphics.drawCenteredString(Minecraft.getInstance().font, label, boxX + boxWidth / 2, getY() + 7,
-				active ? 0xFFFFD166 : error ? 0xFFFF6B6B : 0xFFD6DBE5);
+
+		graphics.fill(getX(), getY(), getX() + getWidth(), getY() + getHeight(), hovered ? 0xFF232833 : 0xFF1A1D24);
+		if (active) {
+			// A key press is being captured: mark the whole row, not just the key box.
+			graphics.fill(getX(), getY(), getX() + 2, getY() + getHeight(), 0xFFFFD166);
+		}
+
+		Minecraft client = Minecraft.getInstance();
+		graphics.drawString(client.font, Component.translatable(key.translationKey), getX() + 8, getY() + 7, 0xFFD6DBE5, false);
+
+		// The key box: always visible, so the user can see what every action is bound to.
+		int boxWidth = 104;
+		int boxX = getX() + getWidth() - boxWidth - 2;
+		graphics.fill(boxX, getY() + 1, boxX + boxWidth, getY() + getHeight() - 1, active ? 0xFF4A3F1F : 0xFF2C313C);
+
+		Component label;
+		int color;
+		if (active) {
+			label = Component.translatable("incremental.msg.press_key_short");
+			color = 0xFFFFD166;
+		} else if (error) {
+			label = Component.translatable("incremental.msg.key_taken_short");
+			color = 0xFFFF6B6B;
+		} else {
+			label = TasKey.describe(key);
+			color = 0xFFE8ECF4;
+		}
+		graphics.drawCenteredString(client.font, label, boxX + boxWidth / 2, getY() + 7, color);
 	}
 
 	@Override
@@ -70,8 +96,8 @@ public class BindingRow extends AbstractWidget {
 	}
 
 	/**
-	 * A click while capturing becomes a mouse binding. The check sits in this override instead of
-	 * {@link #onClick} because the base class only passes the primary button through to the handler.
+	 * While capturing, a click becomes a mouse binding. The check lives in this override and not in
+	 * {@link #onClick} because the base class only forwards the primary button there.
 	 */
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
@@ -95,6 +121,11 @@ public class BindingRow extends AbstractWidget {
 			cancelCapture();
 			return true;
 		}
+		if (event.key() == 1) {
+			// Escape also arrives as key 1 on some layouts; treat it as cancel, never as a binding.
+			cancelCapture();
+			return true;
+		}
 		assign(event.key());
 		return true;
 	}
@@ -109,11 +140,16 @@ public class BindingRow extends AbstractWidget {
 			return;
 		}
 		IncrementalConfig.setKey(key, glfwCode);
-		screen.rebindRow(this);
+		screen.afterRebind();
 	}
 
 	@Override
 	protected void updateWidgetNarration(NarrationElementOutput output) {
 		defaultButtonNarrationText(output);
+	}
+
+	/** Every bindable key, for diagnostics shown by the screen footer. */
+	public static List<TasKey> bindable() {
+		return TasKey.BINDABLE;
 	}
 }

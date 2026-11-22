@@ -59,7 +59,12 @@ public final class TasController {
 		if (client().mouseHandler != null && client().screen == null && !client().mouseHandler.isMouseGrabbed()) {
 			client().mouseHandler.grabMouse();
 		}
-		TasSession.flash("incremental.msg.rec_start", Component.literal(recording.name));
+		// The take is anchored where the player stands right now; say where that is, so the coordinate
+		// capture is visible and not just implied.
+		LocalPlayer player = client().player;
+		String where = player == null ? ""
+				: String.format(java.util.Locale.ROOT, "  @  %.1f / %.1f / %.1f", player.getX(), player.getY(), player.getZ());
+		TasSession.flash("incremental.msg.rec_start", Component.literal(recording.name + where));
 	}
 
 	public static void stopRecording() {
@@ -127,7 +132,9 @@ public final class TasController {
 		if (client.screen == null && !client.mouseHandler.isMouseGrabbed()) {
 			client.mouseHandler.grabMouse();
 		}
-		TasSession.flash("incremental.msg.play_start", Component.literal(recording.name));
+		RecordedFrame first = recording.get(tick);
+		String where = first.hasPosition ? "  @  " + first.positionText() : "";
+		TasSession.flash("incremental.msg.play_start", Component.literal(recording.name + where));
 	}
 
 	/** Starts playback already paused so the recording can be inspected frame by frame. */
@@ -166,6 +173,7 @@ public final class TasController {
 		}
 		TasSession.stopPlayback();
 		TasPlaybackInput.uninstall(Minecraft.getInstance());
+		TasTeleport.reset();
 		TasFreeze.unfreeze();
 		restoreTickRate();
 		clientTickTargetMillis = 0.0F;
@@ -264,7 +272,7 @@ public final class TasController {
 		if (manager == null) {
 			return;
 		}
-		if (!TasSession.isPlayingActive()) {
+		if (!speedApplied()) {
 			return;
 		}
 		float rate = (float) IncrementalConfig.clampRate(IncrementalConfig.tickRate);
@@ -284,14 +292,20 @@ public final class TasController {
 	}
 
 	/**
-	 * Tick length the client has to run at while a recording plays, or 0 when the vanilla value
-	 * applies. The integrated server and the client must tick at the same rate, otherwise the server
-	 * rubber-bands the client-driven player.
+	 * Tick length the client has to run at while a take runs at a non-default speed, or 0 when the
+	 * vanilla value applies. The integrated server and the client must tick at the same rate,
+	 * otherwise the server rubber-bands the client-driven player — this is true while playing back
+	 * and, just as much, while recording at a speed other than 20 t/s.
 	 */
 	private static float clientTickTargetMillis;
 
 	public static float clientTickTargetMillis() {
-		return TasSession.isPlayingActive() ? clientTickTargetMillis : 0.0F;
+		return speedApplied() ? clientTickTargetMillis : 0.0F;
+	}
+
+	/** True while the configured speed is being forced onto the world. */
+	private static boolean speedApplied() {
+		return TasSession.isPlayingActive() || TasSession.isRecordingActive();
 	}
 
 	private static Minecraft client() {
@@ -362,6 +376,14 @@ public final class TasController {
 		frame.hotbar = player.getInventory().getSelectedSlot();
 		frame.yaw = player.getYRot();
 		frame.pitch = player.getXRot();
+		frame.x = player.getX();
+		frame.y = player.getY();
+		frame.z = player.getZ();
+		frame.motionX = player.getDeltaMovement().x;
+		frame.motionY = player.getDeltaMovement().y;
+		frame.motionZ = player.getDeltaMovement().z;
+		frame.dimension = player.level().dimension().identifier().toString();
+		frame.hasPosition = true;
 		recording.put(TasSession.recordCursor(), frame);
 		TasSession.advanceRecordCursor();
 	}
@@ -397,6 +419,8 @@ public final class TasController {
 		if (client.player == null || frame == null) {
 			return;
 		}
+		// Position first: everything else (camera, clicks) is relative to where the player stands.
+		TasTeleport.apply(client, frame);
 		applyCamera(client.player, frame);
 		if (frame.hotbar >= 0 && frame.hotbar < 9 && client.player.getInventory().getSelectedSlot() != frame.hotbar) {
 			client.player.getInventory().setSelectedSlot(frame.hotbar);
@@ -492,12 +516,14 @@ public final class TasController {
 	 * open, which makes this the reliable place for the speed and the freeze bookkeeping.
 	 */
 	public static void onRenderFrame(Minecraft client) {
-		if (TasSession.isPlayingActive()) {
+		if (speedApplied()) {
 			applySpeed();
-			if (TasFreeze.isFrozen()) {
+			if (TasSession.isPlayingActive() && TasFreeze.isFrozen()) {
 				TasFreeze.unfreeze();
 			}
-			drainPhysicalClicks(client);
+			if (TasSession.isPlayingActive()) {
+				drainPhysicalClicks(client);
+			}
 			return;
 		}
 		if (TasSession.state() == TasSession.State.PLAY_PAUSED && !TasFreeze.isFrozen()) {
@@ -506,6 +532,12 @@ public final class TasController {
 		if (!TasSession.isBusy()) {
 			restoreTickRateIfNeeded();
 		}
+	}
+
+	/** Re-reads the "freeze while managing" option while a TAS screen is open. */
+	public static void refreshFreeze() {
+		Minecraft client = Minecraft.getInstance();
+		onScreenChanged(client, client.screen);
 	}
 
 	private static void restoreTickRateIfNeeded() {

@@ -152,7 +152,7 @@ public final class RecordingStorage {
 		}
 		long now = System.currentTimeMillis();
 		JsonObject root = new JsonObject();
-		root.addProperty("format", 1);
+		root.addProperty("format", 2);
 		root.addProperty("name", recording.name);
 		root.addProperty("savedAt", now);
 		root.addProperty("minecraft", "1.21.11");
@@ -171,6 +171,17 @@ public final class RecordingStorage {
 			json.addProperty("hotbar", frame.hotbar);
 			json.addProperty("yaw", frame.yaw);
 			json.addProperty("pitch", frame.pitch);
+			if (frame.hasPosition) {
+				json.addProperty("x", frame.x);
+				json.addProperty("y", frame.y);
+				json.addProperty("z", frame.z);
+				json.addProperty("mx", frame.motionX);
+				json.addProperty("my", frame.motionY);
+				json.addProperty("mz", frame.motionZ);
+				if (frame.dimension != null) {
+					json.addProperty("dim", frame.dimension);
+				}
+			}
 			frames.add(json);
 		}
 		root.add("frames", frames);
@@ -216,6 +227,16 @@ public final class RecordingStorage {
 					frame.hotbar = json.has("hotbar") ? json.get("hotbar").getAsInt() : 0;
 					frame.yaw = json.has("yaw") ? json.get("yaw").getAsFloat() : 0.0F;
 					frame.pitch = json.has("pitch") ? json.get("pitch").getAsFloat() : 0.0F;
+					if (json.has("x") && json.has("y") && json.has("z")) {
+						frame.x = json.get("x").getAsDouble();
+						frame.y = json.get("y").getAsDouble();
+						frame.z = json.get("z").getAsDouble();
+						frame.motionX = json.has("mx") ? json.get("mx").getAsDouble() : 0.0D;
+						frame.motionY = json.has("my") ? json.get("my").getAsDouble() : 0.0D;
+						frame.motionZ = json.has("mz") ? json.get("mz").getAsDouble() : 0.0D;
+						frame.dimension = json.has("dim") ? json.get("dim").getAsString() : null;
+						frame.hasPosition = true;
+					}
 					recording.frames.add(frame);
 				}
 			}

@@ -5,11 +5,12 @@ import net.minecraft.client.Minecraft;
 /**
  * Frame-by-frame navigation.
  *
- * <p>While playback is paused the world is frozen, so the player stands still and a single step
- * means: let exactly one server tick run with the recorded frame applied. Stepping backwards (and
- * stepping while not playing at all) only moves an inspection cursor and previews the recorded
- * camera pose, because a Minecraft world cannot be rewound — real rewinding means loading a save,
- * which is exactly the workflow frame stepping is meant to support.</p>
+ * <p>While playback is paused the world is frozen and a single forward step means: let exactly one
+ * server tick run with the recorded frame applied. Stepping backwards moves an inspection cursor and
+ * puts the player back at the position and rotation stored in that frame, so scrubbing through a
+ * take shows the same places it was recorded at. Block state and entities are not rewound — the world
+ * itself cannot be un-ticked — but the player is always where the take says, which is what frame
+ * editing needs.</p>
  */
 public final class TasStep {
 	private static RecordedFrame armedFrame;
@@ -146,12 +147,13 @@ public final class TasStep {
 		}
 	}
 
-	/** Shows a recorded camera pose without touching the world. */
+	/** Puts the player at the recorded position and rotation, without running a tick. */
 	private static void previewPose(RecordedFrame frame) {
 		Minecraft client = Minecraft.getInstance();
 		if (client.player == null || frame == null) {
 			return;
 		}
+		TasTeleport.apply(client, frame);
 		TasController.applyCamera(client.player, frame);
 		if (frame.hotbar >= 0 && frame.hotbar < 9) {
 			client.player.getInventory().setSelectedSlot(frame.hotbar);

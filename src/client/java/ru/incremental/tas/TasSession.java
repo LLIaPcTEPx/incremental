@@ -148,12 +148,13 @@ public final class TasSession {
 		return client.hasSingleplayerServer() && client.level != null && client.player != null;
 	}
 
-	/** Shows a message above the hotbar and in the TAS overlay. */
+	/**
+	 * Shows a message in the TAS line above the hotbar.
+	 *
+	 * <p>The vanilla overlay message is deliberately not used: it renders in the same spot as the TAS
+	 * line, and having both on screen is what made the text overlap itself.</p>
+	 */
 	public static void flash(Component message) {
-		Minecraft client = Minecraft.getInstance();
-		if (client.gui != null) {
-			client.gui.setOverlayMessage(message, false);
-		}
 		TasHud.flashMessage(message);
 	}
 

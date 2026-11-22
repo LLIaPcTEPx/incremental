@@ -10,6 +10,10 @@ import net.minecraft.network.chat.Component;
 /**
  * Shared look and helpers for the mod's screens. They are pause screens, so the world keeps its
  * paused state while they are open, and closing one returns to the screen that opened it.
+ *
+ * <p>Rendering order is fixed and is the reason {@link #renderPanel} exists: the panel and the list
+ * chrome are painted in {@code renderPanel}, then {@code super.render} draws the widgets on top.
+ * Painting chrome after the widgets would hide them.</p>
  */
 public abstract class TasScreen extends Screen {
 	public static final int PANEL_BG = 0xF0101014;
@@ -32,7 +36,7 @@ public abstract class TasScreen extends Screen {
 	protected int panelHeight;
 	protected int contentTop;
 
-	/** Rows of a scrollable list that fit into {@code height} at the current GUI scale. */
+	/** Rows of a list that fit into {@code height} at the current GUI scale. */
 	protected static int fitRows(int height, int reserved, int rowHeight) {
 		return Math.max(2, (height - reserved) / rowHeight);
 	}
@@ -43,24 +47,42 @@ public abstract class TasScreen extends Screen {
 	}
 
 	@Override
+	public boolean isPauseScreen() {
+		return true;
+	}
+
+	@Override
 	protected void init() {
-		panelWidth = Math.min(width - 40, 470);
-		panelHeight = Math.min(height - 30, 300);
+		panelWidth = Math.min(width - 20, 430);
+		panelHeight = Math.min(height - 20, 300);
 		panelX = (width - panelWidth) / 2;
 		panelY = (height - panelHeight) / 2;
-		contentTop = panelY + 30;
+		contentTop = panelY + 26;
 		buildWidgets();
 	}
 
 	protected abstract void buildWidgets();
 
+	/**
+	 * Paint the panel and any chrome that has to end up <em>below</em> the widgets. Runs before
+	 * {@code super.render}, which is what finally draws the buttons and rows.
+	 */
+	protected void renderPanel(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
+	}
+
 	@Override
 	public void render(GuiGraphics graphics, int mouseX, int mouseY, float delta) {
-		renderTransparentBackground(graphics);
+		// The dim backdrop is already drawn by Screen.renderWithTooltipAndSubtitles before render().
 		graphics.fill(panelX - 1, panelY - 1, panelX + panelWidth + 1, panelY + panelHeight + 1, PANEL_BORDER);
 		graphics.fill(panelX, panelY, panelX + panelWidth, panelY + panelHeight, PANEL_BG);
-		graphics.fill(panelX, panelY, panelX + panelWidth, panelY + 24, HEADER_BG);
-		graphics.drawString(font, title, panelX + 10, panelY + 8, HEADER, false);
+		graphics.fill(panelX, panelY, panelX + panelWidth, panelY + 22, HEADER_BG);
+		graphics.drawString(font, title, panelX + 8, panelY + 7, HEADER, false);
+
+		graphics.enableScissor(panelX, panelY + 22, panelX + panelWidth, panelY + panelHeight);
+		renderPanel(graphics, mouseX, mouseY, delta);
+		graphics.disableScissor();
+
+		// Widgets last: they must never be covered by their own background.
 		super.render(graphics, mouseX, mouseY, delta);
 	}
 

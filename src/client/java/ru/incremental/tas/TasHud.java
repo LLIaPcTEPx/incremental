@@ -1,6 +1,5 @@
 package ru.incremental.tas;
 
-import net.minecraft.ChatFormatting;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -11,10 +10,17 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 
 /**
- * Small indicator above the hotbar that shows what the TAS is doing.
+ * The TAS status line above the hotbar.
+ *
+ * <p>Everything is drawn on <b>one</b> line: the vanilla overlay message, the hotbar and this element
+ * all live in the same small area, and stacking several lines here is what made the text overlap
+ * itself. The mod therefore never calls {@code Gui.setOverlayMessage} and shows status + last action
+ * on a single centred row, well above the vanilla message slot.</p>
  */
 public final class TasHud {
 	private static final Identifier ID = Identifier.fromNamespaceAndPath("incremental", "tas_overlay");
+	private static final int MESSAGE_TICKS = 70;
+
 	private static int messageTicks;
 	private static Component message = Component.empty();
 
@@ -27,7 +33,7 @@ public final class TasHud {
 
 	public static void flashMessage(Component text) {
 		message = text;
-		messageTicks = 60;
+		messageTicks = MESSAGE_TICKS;
 	}
 
 	public static void tick() {
@@ -41,57 +47,66 @@ public final class TasHud {
 		if (client.player == null || client.options.hideGui) {
 			return;
 		}
-		if (!IncrementalConfig.showOverlay && messageTicks <= 0) {
+		boolean status = IncrementalConfig.showOverlay && TasSession.isBusy();
+		boolean flash = messageTicks > 0;
+		if (!status && !flash) {
 			return;
 		}
 
 		int centerX = client.getWindow().getGuiScaledWidth() / 2;
-		int y = client.getWindow().getGuiScaledHeight() - 72;
+		// The vanilla overlay message sits right above the hotbar; keep a clear gap so nothing
+		// doubles up when both are visible at once.
+		int y = client.getWindow().getGuiScaledHeight() - 68;
 
-		if (IncrementalConfig.showOverlay) {
-			Component label = statusLabel();
-			if (label != null) {
-				graphics.drawCenteredString(client.font, label, centerX, y, 0xFFFFFFFF);
-				y += 10;
-			}
-			// Game time of the world: the tick a TAS run is measured in. Two runs are comparable
-			// only when this number matches, which makes it the most useful thing on screen.
-			if (client.level != null && TasSession.isBusy()) {
-				String ticks = "tick " + client.level.getGameTime()
-						+ "   speed " + TasController.speedLabel(IncrementalConfig.tickRate).getString();
-				graphics.drawCenteredString(client.font, Component.literal(ticks), centerX, y, 0xFF9AA3B2);
-				y += 10;
-			}
-			RecordedFrame frame = currentFrame();
-			if (frame != null) {
-				graphics.drawCenteredString(client.font,
-						Component.literal(frame.describe()).withStyle(ChatFormatting.GRAY), centerX, y, 0xFFAAAAAA);
-			}
+		// A dark plate behind the text makes it readable over any terrain and prevents the
+		// "text on text" look even when the background is busy.
+		Component line = status ? statusLine() : null;
+		if (line != null) {
+			int width = client.font.width(line);
+			graphics.fill(centerX - width / 2 - 3, y - 2, centerX + width / 2 + 3, y + 9, 0x90000000);
+			graphics.drawCenteredString(client.font, line, centerX, y, 0xFFFFFFFF);
+			y -= 12;
 		}
 
-		if (messageTicks > 0) {
-			graphics.drawCenteredString(client.font, message, centerX, y + 12, 0xFFFFD166);
+		if (flash) {
+			int width = client.font.width(message);
+			int flashY = status ? y : client.getWindow().getGuiScaledHeight() - 68;
+			graphics.fill(centerX - width / 2 - 3, flashY - 2, centerX + width / 2 + 3, flashY + 9, 0x90000000);
+			graphics.drawCenteredString(client.font, message, centerX, flashY, 0xFFFFD166);
 		}
 	}
 
-	private static RecordedFrame currentFrame() {
-		Recording recording = TasSession.selected();
-		if (recording == null || recording.size() == 0) {
-			return null;
-		}
-		int index = Math.max(0, Math.min(recording.size() - 1, TasSession.playhead() - 1));
-		return recording.get(index);
-	}
-
-	private static Component statusLabel() {
+	private static Component statusLine() {
 		Recording recording = TasSession.selected();
 		int size = recording == null ? 0 : recording.size();
-		return switch (TasSession.state()) {
-			case RECORDING -> Component.translatable("incremental.overlay.recording", size);
-			case RECORDING_PAUSED -> Component.translatable("incremental.overlay.paused", size);
-			case PLAYING -> Component.translatable("incremental.overlay.playing", TasSession.playhead(), size);
-			case PLAY_PAUSED -> Component.translatable("incremental.overlay.play_paused", TasSession.playhead(), size);
-			case IDLE -> null;
+		String tick = recording == null ? "?" : String.valueOf(recording.size());
+		String speed = TasController.speedLabel(IncrementalConfig.tickRate).getString();
+
+		String state = switch (TasSession.state()) {
+			case RECORDING -> Component.translatable("incremental.overlay.recording").getString();
+			case RECORDING_PAUSED -> Component.translatable("incremental.overlay.paused").getString();
+			case PLAYING -> Component.translatable("incremental.overlay.playing").getString();
+			case PLAY_PAUSED -> Component.translatable("incremental.overlay.play_paused").getString();
+			case IDLE -> "";
 		};
+
+		// "REC 123/123  1x (20 t/s)  tick 8421  x/y/z"
+		StringBuilder line = new StringBuilder(state);
+		line.append(' ').append(TasSession.playhead()).append('/').append(tick);
+		line.append("  ").append(speed);
+		if (Minecraft.getInstance().level != null) {
+			line.append("  tick ").append(Minecraft.getInstance().level.getGameTime());
+		}
+		if (Minecraft.getInstance().player != null) {
+			line.append("  ").append(String.format(java.util.Locale.ROOT, "%.1f %.1f %.1f",
+					Minecraft.getInstance().player.getX(),
+					Minecraft.getInstance().player.getY(),
+					Minecraft.getInstance().player.getZ()));
+		}
+		// The recording size is only useful while recording; keep the line short.
+		if (!TasSession.isRecording()) {
+			line.append(" / ").append(size);
+		}
+		return Component.literal(line.toString());
 	}
 }
