@@ -1,17 +1,12 @@
 package ru.incremental.tas;
 
-import java.util.Set;
-
 import com.mojang.blaze3d.platform.InputConstants;
 
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.KeyMapping;
-import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.ClientInput;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.ServerTickRateManager;
-import net.minecraft.world.entity.player.Input;
-import net.minecraft.world.phys.Vec2;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -19,6 +14,23 @@ import org.lwjgl.glfw.GLFW;
  */
 public final class TasController {
 	private TasController() {
+	}
+
+	// ------------------------------------------------------------ working copy
+
+	/**
+	 * The frames that are being recorded / edited. They are relative to the tick recording started,
+	 * so an existing (saved) recording is only replaced when the user saves.
+	 */
+	private static Recording working;
+	private static boolean workingDirty;
+
+	public static Recording working() {
+		return working;
+	}
+
+	public static boolean workingDirty() {
+		return workingDirty;
 	}
 
 	// ------------------------------------------------------------ start / stop
@@ -41,11 +53,13 @@ public final class TasController {
 			TasSession.flash("incremental.msg.need_recording");
 			return;
 		}
-		// Starting a recording always starts from an empty take, the old content is replaced on save.
-		selected.frames.clear();
-		TasSession.beginRecording(selected);
+
+		// Continue from whatever is already in the selected recording, so a take can be redone.
+		working = new Recording(selected.name);
+		working.frames.addAll(selected.frames);
+		workingDirty = false;
+		TasSession.beginRecording(working);
 		TasSession.flash("incremental.msg.rec_start", Component.literal(selected.name));
-		TasFreeze.applyScreenState(Minecraft.getInstance().screen != null);
 	}
 
 	public static void stopRecording() {
@@ -53,6 +67,7 @@ public final class TasController {
 			return;
 		}
 		Recording recording = TasSession.active();
+		workingDirty = true;
 		int ticks = recording == null ? 0 : recording.size();
 		TasSession.stopRecording();
 		TasSession.flash("incremental.msg.rec_stop", ticks);
@@ -96,27 +111,11 @@ public final class TasController {
 		}
 		TasSession.beginPlayback(recording);
 		TasSession.flash("incremental.msg.play_start", Component.literal(recording.name));
-		// Playback runs while the world ticks normally: give the mouse back to the game.
+		installPlaybackInput(Minecraft.getInstance());
+		applyPlaybackSpeed();
 		Minecraft client = Minecraft.getInstance();
 		if (client.screen == null && !client.mouseHandler.isMouseGrabbed()) {
 			client.mouseHandler.grabMouse();
-		}
-	}
-
-	public static void togglePlaybackPause() {
-		switch (TasSession.state()) {
-			case PLAYING -> {
-				TasSession.setState(TasSession.State.PLAY_PAUSED);
-				TasFreeze.setFrozen(true);
-				TasSession.flash("incremental.msg.play_pause");
-			}
-			case PLAY_PAUSED -> {
-				TasSession.setState(TasSession.State.PLAYING);
-				TasFreeze.unfreezeServer();
-				TasSession.flash("incremental.msg.play_resume");
-			}
-			default -> {
-			}
 		}
 	}
 
@@ -130,17 +129,31 @@ public final class TasController {
 		}
 	}
 
+	public static void togglePlaybackPause() {
+		switch (TasSession.state()) {
+			case PLAYING -> {
+				TasSession.setState(TasSession.State.PLAY_PAUSED);
+				TasFreeze.setFrozen(true);
+				TasSession.flash("incremental.msg.play_pause");
+			}
+			case PLAY_PAUSED -> {
+				TasSession.setState(TasSession.State.PLAYING);
+				TasFreeze.unfreezeServer();
+				applyPlaybackSpeed();
+				TasSession.flash("incremental.msg.play_resume");
+			}
+			default -> {
+			}
+		}
+	}
+
 	public static void stopPlayback() {
 		if (!TasSession.isPlaying()) {
 			return;
 		}
-		Recording recording = TasSession.selected();
 		TasSession.stopPlayback();
+		restorePlayerInput(Minecraft.getInstance());
 		TasSession.flash("incremental.msg.play_stop");
-		Minecraft client = Minecraft.getInstance();
-		if (recording != null && client.gui != null) {
-			client.gui.setOverlayMessage(Component.translatable("incremental.msg.play_stop"), false);
-		}
 	}
 
 	/** The single "C" action: pauses recording or playback, whatever is running. */
@@ -152,17 +165,6 @@ public final class TasController {
 		}
 	}
 
-	/** Starts/stops recording or playback for the selected recording. */
-	public static void toggleRecordOrPlay() {
-		if (TasSession.isRecording()) {
-			stopRecording();
-		} else if (TasSession.isPlaying()) {
-			stopPlayback();
-		} else {
-			startRecording();
-		}
-	}
-
 	public static void playOrStop() {
 		if (TasSession.isPlaying()) {
 			stopPlayback();
@@ -171,14 +173,34 @@ public final class TasController {
 		}
 	}
 
+	// ------------------------------------------------------------ save
+
+	/** Writes the take that was just recorded into the selected recording. */
 	public static void saveSelected() {
-		Recording recording = TasSession.selected();
-		if (recording == null) {
+		Recording selected = TasSession.selected();
+		if (selected == null) {
 			TasSession.flash("incremental.msg.need_recording");
 			return;
 		}
-		if (RecordingStorage.save(recording)) {
-			TasSession.flash("incremental.msg.saved", Component.literal(recording.name));
+		if (TasSession.isRecording()) {
+			stopRecording();
+		}
+		if (working != null && working.name.equals(selected.name) && (workingDirty || working.size() != selected.size())) {
+			selected.frames.clear();
+			selected.frames.addAll(working.frames);
+		}
+		if (RecordingStorage.save(selected)) {
+			workingDirty = false;
+			TasSession.flash("incremental.msg.saved", Component.literal(selected.name));
+		}
+	}
+
+	/** Saves whatever the selected recording is, without an active take. */
+	public static void saveEverything() {
+		Recording selected = TasSession.selected();
+		if (selected != null) {
+			RecordingStorage.save(selected);
+			TasSession.flash("incremental.msg.saved", Component.literal(selected.name));
 		}
 	}
 
@@ -199,7 +221,7 @@ public final class TasController {
 		int next = Math.max(0, Math.min(SPEEDS.length - 1, index + direction));
 		IncrementalConfig.tickRate = SPEEDS[next];
 		IncrementalConfig.save();
-		applyTickRate();
+		applyPlaybackSpeed();
 		TasSession.flash("incremental.msg.speed", speedLabel(IncrementalConfig.tickRate));
 	}
 
@@ -222,28 +244,17 @@ public final class TasController {
 		return Component.literal(text + "x (" + String.format("%.0f", rate) + " t/s)");
 	}
 
-	/** Applies the configured speed to the live server tick rate while playing. */
-	private static void applyTickRate() {
-		Minecraft client = Minecraft.getInstance();
-		if (client.getSingleplayerServer() == null) {
-			return;
-		}
-		ServerTickRateManager manager = client.getSingleplayerServer().tickRateManager();
-		if (TasSession.isPlaying()) {
-			manager.setTickRate((float) IncrementalConfig.tickRate);
-		}
-	}
-
-	/** Applies the configured playback speed to the server tick rate. */
+	/** Applies the configured playback speed to the live server tick rate. */
 	public static void applyPlaybackSpeed() {
 		Minecraft client = Minecraft.getInstance();
 		if (client.getSingleplayerServer() == null || !TasSession.isPlaying()) {
 			return;
 		}
-		client.getSingleplayerServer().tickRateManager().setTickRate((float) IncrementalConfig.tickRate);
+		ServerTickRateManager manager = client.getSingleplayerServer().tickRateManager();
+		manager.setTickRate((float) IncrementalConfig.tickRate);
 	}
 
-	static void restoreTickRate() {
+	public static void restoreTickRate() {
 		Minecraft client = Minecraft.getInstance();
 		if (client.getSingleplayerServer() != null) {
 			client.getSingleplayerServer().tickRateManager().setTickRate(20.0F);
@@ -260,8 +271,8 @@ public final class TasController {
 	// ------------------------------------------------------------ per tick
 
 	/**
-	 * Called from the player's {@code aiStep} before vanilla reads the input. This is where frames
-	 * are recorded / played back, because vanilla already consumed the keyboard state at that point.
+	 * Called from the player's tick, before vanilla reads the input: this is where frames are
+	 * recorded and where the next recorded frame is applied.
 	 */
 	public static void onPlayerInputTick() {
 		Minecraft client = Minecraft.getInstance();
@@ -269,9 +280,7 @@ public final class TasController {
 			return;
 		}
 		TasStepKeys.poll(client);
-		if (client.player == null) {
-			return;
-		}
+
 		if (TasSession.isRecordingActive()) {
 			recordFrame(client);
 		} else if (TasSession.isPlaying()) {
@@ -292,8 +301,8 @@ public final class TasController {
 			frame.yaw = TasMotion.takeYaw();
 			frame.pitch = TasMotion.takePitch();
 		}
-		frame.shift = frame.shift || client.options.keyShift.isDown();
 		recording.frames.add(frame);
+		workingDirty = true;
 		TasSession.setPlayhead(recording.size());
 	}
 
@@ -314,19 +323,23 @@ public final class TasController {
 
 	private static void finishPlayback(Recording recording) {
 		TasSession.stopPlayback();
+		restorePlayerInput(Minecraft.getInstance());
 		TasSession.flash("incremental.msg.play_finish", Component.literal(recording.name));
 	}
 
-	/** Injects a recorded frame into the vanilla input handler. */
+	/** Injects a recorded frame: movement through the custom input, buttons through the bindings. */
 	public static void applyFrame(Minecraft client, RecordedFrame frame) {
 		if (client.player == null || frame == null) {
 			return;
 		}
+		installPlaybackInput(client);
 		ClientInput input = client.player.input;
-		Input wanted = frame.toInput();
-		input.keyPresses = wanted;
-		// Keep the virtual movement vector in sync, vanilla derives movement from it.
-		TasMotion.applyMoveVector(input, wanted);
+		if (input instanceof TasPlaybackInput playbackInput) {
+			playbackInput.setFrame(frame);
+		} else {
+			input.keyPresses = frame.toInput();
+		}
+
 		if (frame.hotbar >= 0 && frame.hotbar < 9 && client.player.getInventory().getSelectedSlot() != frame.hotbar) {
 			client.player.getInventory().setSelectedSlot(frame.hotbar);
 		}
@@ -337,25 +350,33 @@ public final class TasController {
 		}
 	}
 
-	/** Forwards a mouse click to vanilla when the TAS froze the world (vanilla skips it then). */
-	public static void feedMouseClicks(Minecraft client, boolean attack, boolean use) {
-		if (!TasFreeze.isFrozen() || client.player == null) {
+	/** Swaps the vanilla keyboard input for the playback input (and pauses the vanilla one). */
+	public static void installPlaybackInput(Minecraft client) {
+		if (client.player == null) {
 			return;
 		}
-		if (attack) {
-			KeyMapping.click(InputConstants.Type.MOUSE.getOrCreate(0));
+		if (client.player.input instanceof TasPlaybackInput) {
+			return;
 		}
-		if (use) {
-			KeyMapping.click(InputConstants.Type.MOUSE.getOrCreate(1));
-		}
+		TasPlaybackInput playbackInput = new TasPlaybackInput();
+		playbackInput.setFrame(null);
+		client.player.input = playbackInput;
+		KeyMapping.releaseAll();
 	}
 
-	public static boolean screenAllowsButtons(Minecraft client) {
-		return client.screen == null;
+	/** Gives control back to the player. */
+	public static void restorePlayerInput(Minecraft client) {
+		if (client.player == null) {
+			return;
+		}
+		if (client.player.input instanceof TasPlaybackInput) {
+			client.player.input = new net.minecraft.client.player.KeyboardInput(client.options);
+			KeyMapping.releaseAll();
+		}
 	}
 
 	private static boolean mouseHeld(Minecraft client, int button) {
-		return GLFW.glfwGetMouseButton(client.getWindow().handle(), button) == GLFW.GLFW_PRESS;
+		return client.getWindow() != null && GLFW.glfwGetMouseButton(client.getWindow().handle(), button) == GLFW.GLFW_PRESS;
 	}
 
 	private static void setPressed(Minecraft client, KeyMapping mapping, boolean pressed) {
@@ -371,6 +392,19 @@ public final class TasController {
 			mapping.setDown(true);
 			// Makes vanilla treat this as a fresh press: one attack / one use per recorded tick.
 			KeyMapping.click(InputConstants.Type.MOUSE.getOrCreate(mapping == client.options.keyAttack ? 0 : 1));
+		}
+	}
+
+	/** Forwards a mouse click to vanilla when the TAS froze the world (vanilla skips it then). */
+	public static void feedMouseClicks(Minecraft client, boolean attack, boolean use) {
+		if (!TasFreeze.isFrozen() || client.player == null) {
+			return;
+		}
+		if (attack) {
+			KeyMapping.click(InputConstants.Type.MOUSE.getOrCreate(0));
+		}
+		if (use) {
+			KeyMapping.click(InputConstants.Type.MOUSE.getOrCreate(1));
 		}
 	}
 
@@ -395,7 +429,7 @@ public final class TasController {
 
 	/** V — inserts an empty frame at the playhead so a new tick can be timed. */
 	public static void insertFrame() {
-		Recording recording = TasSession.selected();
+		Recording recording = TasSession.isRecording() ? TasSession.active() : TasSession.selected();
 		if (recording == null) {
 			TasSession.flash("incremental.msg.need_recording");
 			return;
@@ -406,36 +440,8 @@ public final class TasController {
 		TasSession.flash("incremental.msg.frame_new");
 	}
 
-	// ------------------------------------------------------------ key polling
+	// ------------------------------------------------------------ key helpers
 
-	/**
-	 * GLFW keyboard repeat fires while a key is held, game ticks can be slower. Frames are stepped
-	 * from the render loop with a short cooldown so one press equals one frame.
-	 */
-	private static final int FRAME_COOLDOWN_MS = 60;
-	private static long lastFrameStep;
-
-	public static boolean frameKeysReady() {
-		return System.currentTimeMillis() - lastFrameStep >= FRAME_COOLDOWN_MS;
-	}
-
-	public static void markFrameStep() {
-		lastFrameStep = System.currentTimeMillis();
-	}
-
-	public static boolean isKeyHeld(TasKey key) {
-		Minecraft client = Minecraft.getInstance();
-		if (client.getWindow() == null) {
-			return false;
-		}
-		int code = IncrementalConfig.getKey(key);
-		if (code == GLFW.GLFW_KEY_UNKNOWN) {
-			return false;
-		}
-		return InputConstants.isKeyDown(client.getWindow(), code);
-	}
-
-	/** Consumes one queued press of a TasKey that is bound to the given key mapping. */
 	public static boolean consumeMappingClick(TasKey key) {
 		KeyMapping mapping = TasKey.mapping(key);
 		if (mapping == null) {
@@ -446,14 +452,5 @@ public final class TasController {
 			clicked = true;
 		}
 		return clicked;
-	}
-
-	/** True when the given screen should swallow TAS hotkeys (chat, text fields, other menus). */
-	public static boolean screenBlocksHotkeys(Screen screen) {
-		return screen != null;
-	}
-
-	public static Set<String> pressedKeyNames() {
-		return Set.of();
 	}
 }

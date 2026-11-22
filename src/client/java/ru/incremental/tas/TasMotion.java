@@ -1,8 +1,6 @@
 package ru.incremental.tas;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.ClientInput;
-import net.minecraft.world.entity.player.Input;
 
 /**
  * Camera motion support. While recording the raw mouse delta produced by Minecraft itself is
@@ -21,10 +19,6 @@ public final class TasMotion {
 		if (TasSession.isRecordingActive()) {
 			pendingYaw += deltaX;
 			pendingPitch += deltaY;
-		} else if (TasSession.isPlaying()) {
-			// Playback drives the camera, ignore the real mouse so it cannot fight the recording.
-			Minecraft client = Minecraft.getInstance();
-			client.mouseHandler.setIgnoreFirstMove();
 		}
 	}
 
@@ -63,10 +57,5 @@ public final class TasMotion {
 		client.player.turn(invertX ? -xo : xo, invertY ? -yo : yo);
 	}
 
-	/**
-	 * The vanilla input handler derives the movement vector from the key mappings it polls; the
-	 * recorded key flags are enough, so nothing else has to be pushed here.
-	 */
-	public static void applyMoveVector(ClientInput input, Input wanted) {
-	}
+
 }

@@ -1,12 +1,10 @@
 package ru.incremental.tas;
 
 import java.util.List;
-import java.util.function.Supplier;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
 import net.minecraft.client.KeyMapping;
-import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
@@ -73,9 +71,7 @@ public enum TasKey {
 		KeyMapping.Category category = category();
 		mappings = new KeyMapping[values().length];
 		for (TasKey key : values()) {
-			String name = key.translationKey;
-			int code = key.defaultKey;
-			mappings[key.ordinal()] = new KeyMapping(name, InputConstants.Type.KEYSYM, code, category);
+			mappings[key.ordinal()] = new KeyMapping(key.translationKey, InputConstants.Type.KEYSYM, key.defaultKey, category);
 		}
 	}
 
@@ -85,14 +81,6 @@ public enum TasKey {
 
 	public static KeyMapping[] mappings() {
 		return mappings == null ? new KeyMapping[0] : mappings.clone();
-	}
-
-	/**
-	 * A binding that is shown in the vanilla controls screen. The category prefix is fixed so the
-	 * label reads "Incremental TAS — Start recording" there.
-	 */
-	public String displayName() {
-		return "Incremental TAS · " + defaultValue;
 	}
 
 	/** The binding currently in use (config override, otherwise the default). */
@@ -125,5 +113,4 @@ public enum TasKey {
 		return key.getDisplayName();
 	}
 
-	private static final Supplier<Minecraft> CLIENT = Minecraft::getInstance;
 }

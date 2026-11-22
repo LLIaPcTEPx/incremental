@@ -67,10 +67,6 @@ public abstract class TasScreen extends Screen {
 		graphics.drawCenteredString(font, text, panelX + panelWidth / 2, y, color);
 	}
 
-	protected void drawLabel(GuiGraphics graphics, String text, int x, int y) {
-		graphics.drawString(font, Component.literal(text), x, y, MUTED, false);
-	}
-
 	protected Button button(Component label, int x, int y, int w, int h, Button.OnPress onPress) {
 		return Button.builder(label, onPress).bounds(x, y, w, h).build();
 	}

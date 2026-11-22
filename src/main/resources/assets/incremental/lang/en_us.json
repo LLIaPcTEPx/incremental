@@ -13,17 +13,14 @@
 	"key.incremental.save": "Save recording",
 	"key.incremental.play": "Play selected recording",
 	"key.incremental.new_entry": "Create recording",
-
 	"incremental.menu.config": "TAS Settings",
 	"incremental.menu.config.tooltip": "Key bindings, speed and playback settings",
 	"incremental.menu.recordings": "Recordings",
 	"incremental.menu.recordings.tooltip": "Record, play back and edit your recordings",
-
 	"incremental.screen.config.title": "TAS Settings",
 	"incremental.screen.recordings.title": "Recordings",
 	"incremental.screen.create.title": "New recording",
 	"incremental.screen.rename.title": "Rename recording",
-
 	"incremental.button.done": "Done",
 	"incremental.button.cancel": "Cancel",
 	"incremental.button.create": "Create",
@@ -34,7 +31,6 @@
 	"incremental.button.bind": "Change",
 	"incremental.button.reset": "Reset",
 	"incremental.button.defaults": "Defaults",
-
 	"incremental.field.name": "Recording name",
 	"incremental.field.locked": "Stop playback to edit",
 	"incremental.recordings.empty": "No recordings yet — press Create",
@@ -45,7 +41,6 @@
 	"incremental.recordings.duration": "Length: %s",
 	"incremental.recordings.saved": "Saved: %s",
 	"incremental.recordings.none": "—",
-
 	"incremental.option.tick_rate": "Playback tick rate",
 	"incremental.option.tick_rate.tooltip": "How fast the ticks are replayed (20 = normal game speed)",
 	"incremental.option.record_motion": "Record camera motion",
@@ -54,13 +49,11 @@
 	"incremental.option.overlay.tooltip": "Display recording / playback state above the hotbar",
 	"incremental.option.freeze": "Freeze game while managing",
 	"incremental.option.freeze.tooltip": "While a TAS screen is open the world is frozen (like during pause)",
-
 	"incremental.overlay.recording": "● REC  %s ticks",
 	"incremental.overlay.paused": "❚❚ PAUSED  %s ticks",
 	"incremental.overlay.playing": "▶ PLAYING  %s / %s",
 	"incremental.overlay.play_paused": "❚❚ PLAYBACK PAUSED  %s / %s",
 	"incremental.overlay.frame": "FRAME  %s / %s",
-
 	"incremental.msg.rec_start": "Recording started: %s",
 	"incremental.msg.rec_stop": "Recording stopped: %s ticks",
 	"incremental.msg.rec_pause": "Recording paused",
@@ -89,5 +82,7 @@
 	"incremental.msg.rewound": "Rewound → tick %s",
 	"incremental.msg.forwarded": "Forwarded → tick %s",
 	"incremental.msg.press_key": "Press a key (Esc — cancel)",
-	"incremental.msg.unsupported": "TAS is only supported in single-player"
+	"incremental.msg.unsupported": "TAS is only supported in single-player",
+	"incremental.msg.key_taken": "This key is already used by another TAS action",
+	"incremental.msg.saved_all": "All recordings saved"
 }

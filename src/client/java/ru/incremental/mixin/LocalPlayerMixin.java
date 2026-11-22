@@ -10,8 +10,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.incremental.tas.TasController;
 
 /**
- * Injects the TAS input right before the player's ai step: the frame is recorded or the next
- * recorded frame is applied to the vanilla input handler.
+ * The player tick starts here, before vanilla reads the input in {@code aiStep}. This is where a
+ * frame is recorded, or where the next recorded frame is pushed into the input handler.
  */
 @Mixin(LocalPlayer.class)
 public abstract class LocalPlayerMixin {

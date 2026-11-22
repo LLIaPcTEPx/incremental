@@ -14,15 +14,19 @@ public final class TasStep {
 	private TasStep() {
 	}
 
-	/** Requests one game tick and moves the playhead forward when the tick has run. */
+	/** Requests one game tick and moves the playhead forward when that tick has run. */
 	public static void stepNextFrame() {
 		Recording recording = TasSession.selected();
+		if (TasSession.isRecording()) {
+			TasSession.flash("incremental.msg.playback_not_recording");
+			return;
+		}
 		if (recording == null || recording.size() == 0) {
 			TasSession.flash("incremental.msg.frame_empty");
 			return;
 		}
 		if (!TasSession.isPlaying()) {
-			// Not playing: just move the inspection cursor.
+			// Not playing: only move the inspection cursor.
 			TasSession.setPlayhead(Math.min(recording.size(), TasSession.playhead() + 1));
 			TasSession.flash("incremental.msg.frame", TasSession.playhead(), recording.size());
 			return;
@@ -35,20 +39,33 @@ public final class TasStep {
 			TasSession.flash("incremental.msg.frame_empty");
 			return;
 		}
-		TasFreeze.stepFrame(() -> TasSession.flash("incremental.msg.frame", TasSession.playhead() + 1, recording.size()));
+		TasFreeze.stepFrame(() -> {
+			// The tick ran: apply the frame that is now current so the next step starts from it.
+			Minecraft client = Minecraft.getInstance();
+			int tick = TasSession.playhead();
+			if (tick < recording.size()) {
+				TasController.applyFrame(client, recording.get(tick));
+				TasSession.setPlayhead(tick + 1);
+			}
+			TasSession.flash("incremental.msg.frame", TasSession.playhead(), recording.size());
+		});
 	}
 
-	/** Steps back one recorded frame for inspection. */
+	/** Steps back one recorded frame and previews it. */
 	public static void stepPrevFrame() {
 		Recording recording = TasSession.selected();
 		if (recording == null || recording.size() == 0) {
 			TasSession.flash("incremental.msg.frame_empty");
 			return;
 		}
+		if (TasSession.state() == TasSession.State.PLAYING) {
+			TasController.togglePlaybackPause();
+		}
 		int tick = Math.max(0, TasSession.playhead() - 1);
 		TasSession.setPlayhead(tick);
-		if (TasSession.isPlaying() && TasSession.state() == TasSession.State.PLAYING) {
-			TasController.togglePlaybackPause();
+		if (TasSession.isPlaying()) {
+			TasController.applyFrame(Minecraft.getInstance(), recording.get(tick));
+			TasFreeze.setFrozen(true);
 		}
 		TasSession.flash("incremental.msg.frame", tick + 1, recording.size());
 	}
@@ -59,10 +76,13 @@ public final class TasStep {
 			TasSession.flash("incremental.msg.frame_empty");
 			return;
 		}
+		if (TasSession.state() == TasSession.State.PLAYING) {
+			TasController.togglePlaybackPause();
+		}
 		int tick = Math.max(0, TasSession.playhead() - frames);
 		TasSession.setPlayhead(tick);
-		if (TasSession.isPlaying() && TasSession.state() == TasSession.State.PLAYING) {
-			TasController.togglePlaybackPause();
+		if (TasSession.isPlaying()) {
+			TasController.applyFrame(Minecraft.getInstance(), recording.get(tick));
 		}
 		TasSession.flash("incremental.msg.rewound", tick);
 	}

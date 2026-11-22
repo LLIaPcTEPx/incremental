@@ -20,8 +20,8 @@ import ru.incremental.tas.TasKey;
 public class TasConfigScreen extends TasScreen {
 	private static final int ROW_H = 22;
 
+	/** Key binding capture uses a widget so it integrates with the screen focus/input chain. */
 	private static TasKey capturing;
-	private static String errorKey;
 	private static long errorUntil;
 
 	private int scroll;
@@ -30,6 +30,14 @@ public class TasConfigScreen extends TasScreen {
 	private int listWidth;
 	private int listHeight;
 	private final Button[] bindingButtons = new Button[TasKey.BINDABLE.size()];
+
+	private static TasKey capturing() {
+		return capturing;
+	}
+
+	private static void setCapturing(TasKey key) {
+		capturing = key;
+	}
 
 	public TasConfigScreen(Screen parent) {
 		super(Component.translatable("incremental.screen.config.title"), parent);
@@ -57,11 +65,11 @@ public class TasConfigScreen extends TasScreen {
 
 		addRenderableWidget(button(Component.translatable("incremental.button.defaults"), panelX + 8, footerY, 86, 20, b -> {
 			IncrementalConfig.resetAllKeys();
-			capturing = null;
+			setCapturing(null);
 			rebuildWidgets();
 		}));
 
-		addRenderableWidget(button(Component.literal(TasController.speedLabel(IncrementalConfig.tickRate).getString()), panelX + 100, footerY, 120, 20, b -> {
+		addRenderableWidget(button(TasController.speedLabel(IncrementalConfig.tickRate), panelX + 100, footerY, 120, 20, b -> {
 			double[] rates = {5, 10, 15, 20, 30, 40, 60, 100, 200};
 			int index = 0;
 			for (int i = 0; i < rates.length; i++) {
@@ -75,19 +83,17 @@ public class TasConfigScreen extends TasScreen {
 			rebuildWidgets();
 		})).setTooltip(Tooltip.create(Component.translatable("incremental.option.tick_rate.tooltip")));
 
-		addRenderableWidget(button(toggleLabel("incremental.option.record_motion", IncrementalConfig.recordMotion), panelX + 226, footerY, 130, 20, b -> {
+		addRenderableWidget(button(toggleLabel("incremental.option.record_motion", IncrementalConfig.recordMotion), panelX + 226, footerY, 142, 20, b -> {
 			IncrementalConfig.recordMotion = !IncrementalConfig.recordMotion;
 			IncrementalConfig.save();
 			rebuildWidgets();
 		})).setTooltip(Tooltip.create(Component.translatable("incremental.option.record_motion.tooltip")));
 
-		addRenderableWidget(button(toggleLabel("incremental.option.overlay", IncrementalConfig.showOverlay), panelX + 362, footerY, 110, 20, b -> {
+		addRenderableWidget(button(toggleLabel("incremental.option.overlay", IncrementalConfig.showOverlay), panelX + 374, footerY, 82, 20, b -> {
 			IncrementalConfig.showOverlay = !IncrementalConfig.showOverlay;
 			IncrementalConfig.save();
 			rebuildWidgets();
 		})).setTooltip(Tooltip.create(Component.translatable("incremental.option.overlay.tooltip")));
-
-		addRenderableWidget(doneButton(panelX + panelWidth - 78, footerY, 70));
 
 		int visibleRows = visibleRows();
 		for (int i = 0; i < TasKey.BINDABLE.size(); i++) {
@@ -98,17 +104,9 @@ public class TasConfigScreen extends TasScreen {
 			}
 			TasKey key = TasKey.BINDABLE.get(i);
 			int y = listY + row * ROW_H;
-			bindingButtons[i] = addRenderableWidget(button(Component.empty(), listX + listWidth - 108, y, 104, 20, b -> {
-				capturing = capturing == key ? null : key;
-				if (capturing != null) {
-					tas$clearFocus();
-				}
-			}));
+			TasKey rowKey = key;
+			bindingButtons[i] = addRenderableWidget(button(Component.empty(), listX + listWidth - 108, y, 104, 20, b -> setCapturing(capturing() == rowKey ? null : rowKey)));
 		}
-	}
-
-	private void tas$clearFocus() {
-		this.setFocused(null);
 	}
 
 	private static Component toggleLabel(String translationKey, boolean value) {
@@ -132,12 +130,14 @@ public class TasConfigScreen extends TasScreen {
 			graphics.fill(listX, y, listX + listWidth, y + ROW_H - 2, hovered ? ROW_HOVER : ROW_BG);
 			graphics.drawString(font, Component.literal(key.defaultValue), listX + 6, y + 7, TEXT, false);
 
-			Component binding = capturing == key
+			Component binding = capturing() == key
 					? Component.translatable("incremental.msg.press_key")
 					: TasKey.describe(key.boundKey());
 			Button button = bindingButtons[i];
 			if (button != null) {
 				button.setMessage(binding);
+				button.setX(listX + listWidth - 108);
+				button.setY(y);
 			}
 		}
 		graphics.disableScissor();
@@ -152,31 +152,21 @@ public class TasConfigScreen extends TasScreen {
 			graphics.fill(barX, listY + offset, barX + 2, listY + offset + thumb, ACCENT_SOFT);
 		}
 
-		if (errorKey != null && System.currentTimeMillis() < errorUntil) {
-			drawCenteredText(graphics, Component.translatable(errorKey), panelY + panelHeight - 36, DANGER);
+		if (errorUntil > System.currentTimeMillis()) {
+			drawCenteredText(graphics, Component.translatable("incremental.msg.key_taken"), panelY + panelHeight - 38, DANGER);
 		}
-	}
-
-	@Override
-	public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
-		if (mouseX >= listX && mouseX <= listX + listWidth && mouseY >= listY && mouseY <= listY + listHeight) {
-			int maxScroll = Math.max(0, TasKey.BINDABLE.size() - visibleRows());
-			scroll = Mth.clamp(scroll - (int) Math.signum(vertical), 0, maxScroll);
-			rebuildWidgets();
-			return true;
-		}
-		return super.mouseScrolled(mouseX, mouseY, horizontal, vertical);
 	}
 
 	@Override
 	public boolean keyPressed(KeyEvent event) {
-		if (capturing != null) {
+		TasKey key = capturing();
+		if (key != null) {
 			if (event.isEscape()) {
-				capturing = null;
+				setCapturing(null);
 				return true;
 			}
-			assign(capturing, event.key());
-			capturing = null;
+			assign(key, event.key());
+			setCapturing(null);
 			return true;
 		}
 		return super.keyPressed(event);
@@ -184,32 +174,48 @@ public class TasConfigScreen extends TasScreen {
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-		if (capturing != null) {
-			if (event.button() == 0 && justOpened()) {
+		TasKey key = capturing();
+		if (key != null) {
+			if (justOpened()) {
 				return true;
 			}
-			// Mouse buttons are stored as negative values, matching InputConstants mouse codes.
-			assign(capturing, -100 - event.button());
-			capturing = null;
+			assign(key, -100 - event.button());
+			setCapturing(null);
 			return true;
 		}
 		return super.mouseClicked(event, doubleClick);
 	}
+
+	@Override
+	public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
+		if (mouseX >= listX && mouseX <= listX + listWidth && mouseY >= listY && mouseY <= listY + listHeight) {
+			int maxScroll = Math.max(0, TasKey.BINDABLE.size() - visibleRows());
+			scroll = Mth.clamp(scroll - (int) Math.signum(vertical), 0, maxScroll);
+			for (int i = 0; i < TasKey.BINDABLE.size(); i++) {
+				Button button = bindingButtons[i];
+				if (button == null) {
+					continue;
+				}
+				int row = i - scroll;
+				button.visible = row >= 0 && row < visibleRows();
+				button.setY(listY + row * ROW_H);
+			}
+			return true;
+		}
+		return super.mouseScrolled(mouseX, mouseY, horizontal, vertical);
+	}
+
+
 
 	private void assign(TasKey key, int glfwCode) {
 		if (glfwCode == GLFW.GLFW_KEY_UNKNOWN) {
 			return;
 		}
 		if (IncrementalConfig.keyUsedBy(key, glfwCode)) {
-			errorKey = "incremental.msg.name_taken";
 			errorUntil = System.currentTimeMillis() + 2000L;
 			return;
 		}
 		IncrementalConfig.setKey(key, glfwCode);
 		rebuildWidgets();
-	}
-
-	public static void clearCapture() {
-		capturing = null;
 	}
 }
