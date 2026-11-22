@@ -46,6 +46,24 @@ public class BindingRow extends AbstractWidget {
 		return capturing != null;
 	}
 
+	/** The row that waits for a key, or null. */
+	public static BindingRow capturingRow() {
+		return capturing;
+	}
+
+	/**
+	 * Assigns a key to the capturing row. Called by the screen, so the binding does not depend on
+	 * which widget happens to own the focus.
+	 */
+	static boolean assignToCapturing(int glfwCode) {
+		BindingRow row = capturing;
+		if (row == null) {
+			return false;
+		}
+		row.assign(glfwCode);
+		return true;
+	}
+
 	public static void cancelCapture() {
 		capturing = null;
 	}
@@ -53,6 +71,13 @@ public class BindingRow extends AbstractWidget {
 	private void startCapture() {
 		capturing = this;
 		this.errorUntil = 0L;
+		// Keys are routed through the focused child, so the row has to hold the focus itself.
+		setFocused(true);
+	}
+
+	@Override
+	public boolean shouldTakeFocusAfterInteraction() {
+		return true;
 	}
 
 	@Override
@@ -130,7 +155,7 @@ public class BindingRow extends AbstractWidget {
 		return true;
 	}
 
-	private void assign(int glfwCode) {
+	void assign(int glfwCode) {
 		capturing = null;
 		if (glfwCode == org.lwjgl.glfw.GLFW.GLFW_KEY_UNKNOWN) {
 			return;

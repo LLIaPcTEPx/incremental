@@ -151,6 +151,20 @@ public class TasConfigScreen extends TasScreen {
 	}
 
 	@Override
+	public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick) {
+		BindingRow row = BindingRow.capturingRow();
+		if (row != null) {
+			// A click inside the capturing row keeps waiting; anywhere else abandons the rebind, so
+			// the screen never stays in a hidden "press a key" mode.
+			if (row.isMouseOver(event.x(), event.y())) {
+				return super.mouseClicked(event, doubleClick);
+			}
+			BindingRow.cancelCapture();
+		}
+		return super.mouseClicked(event, doubleClick);
+	}
+
+	@Override
 	public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
 		if (mouseX >= listX && mouseX <= listX + listWidth && mouseY >= listY && mouseY <= listY + listHeight) {
 			if (maxScroll() > 0) {
@@ -160,6 +174,24 @@ public class TasConfigScreen extends TasScreen {
 			}
 		}
 		return super.mouseScrolled(mouseX, mouseY, horizontal, vertical);
+	}
+
+	/**
+	 * Escape must reach the row that is waiting for a new key before it reaches the screen.
+	 * {@code Screen.keyPressed} closes the screen on Escape, and this override runs first, so a
+	 * rebind can be cancelled without also leaving the settings.
+	 */
+	@Override
+	public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+		if (!BindingRow.anyCapture()) {
+			return super.keyPressed(event);
+		}
+		if (event.isEscape()) {
+			BindingRow.cancelCapture();
+			return true;
+		}
+		// The capturing row owns the key; the screen only cancels on Escape.
+		return BindingRow.assignToCapturing(event.key());
 	}
 
 	@Override
