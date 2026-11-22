@@ -1,7 +1,5 @@
 package ru.incremental.tas;
 
-import java.util.Locale;
-
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.network.chat.Component;
@@ -168,7 +166,4 @@ public final class TasSession {
 		client.getToastManager().addToast(new SystemToast(SystemToast.SystemToastId.PERIODIC_NOTIFICATION, title, description));
 	}
 
-	public static String formatTicks(int ticks) {
-		return String.format(Locale.ROOT, "%d", ticks);
-	}
 }

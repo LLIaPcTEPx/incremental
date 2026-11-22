@@ -1,7 +1,6 @@
 package ru.incremental.tas;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
 
 /**
  * Frame-by-frame navigation.
@@ -76,10 +75,6 @@ public final class TasStep {
 			TasSession.setPlayhead(Math.min(recording.size(), TasSession.playhead() + 1));
 			TasSession.flash("incremental.msg.frame", TasSession.playhead(), recording.size());
 		}
-	}
-
-	public static boolean busy() {
-		return awaitingTick;
 	}
 
 	// ------------------------------------------------------------ actions
@@ -161,12 +156,5 @@ public final class TasStep {
 		if (frame.hotbar >= 0 && frame.hotbar < 9) {
 			client.player.getInventory().setSelectedSlot(frame.hotbar);
 		}
-	}
-
-	public static Component frameLabel(Recording recording) {
-		if (recording == null) {
-			return Component.empty();
-		}
-		return Component.translatable("incremental.msg.frame", TasSession.playhead(), recording.size());
 	}
 }

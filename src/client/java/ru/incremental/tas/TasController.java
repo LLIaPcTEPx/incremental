@@ -205,21 +205,7 @@ public final class TasController {
 		}
 	}
 
-	public static void saveEverything() {
-		int saved = 0;
-		for (Recording recording : RecordingStorage.all()) {
-			if (RecordingStorage.save(recording)) {
-				saved++;
-			}
-		}
-		TasSession.flash("incremental.msg.saved_all_count", saved);
-	}
-
 	// ------------------------------------------------------------ speed
-
-	public static double tickRate() {
-		return IncrementalConfig.tickRate;
-	}
 
 	public static void speedUp() {
 		changeSpeed(1);
