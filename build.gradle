@@ -63,9 +63,11 @@ jar {
 }
 
 remapJar {
-	// Keep the licence inside the distributable jar as well.
+	// Keep the licence inside the distributable jar as well. The name is captured in a local
+	// variable: reaching for `project` inside the closure breaks the configuration cache.
+	def jarName = project.name
 	from("LICENSE") {
-		rename { "${it}_${project.name}" }
+		rename { "${it}_$jarName" }
 	}
 }
 
