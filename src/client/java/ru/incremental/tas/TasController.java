@@ -259,6 +259,11 @@ public final class TasController {
 		return Component.literal(text + "x (" + String.format(java.util.Locale.ROOT, "%.0f", rate) + " t/s)");
 	}
 
+	/** Pushes the config bindings into the vanilla key mappings (after a rebind or a reset). */
+	public static void syncKeyMappings() {
+		IncrementalConfig.syncAllMappings();
+	}
+
 	/** Applies the configured speed to the live server while a recording is playing. */
 	public static void applySpeed() {
 		ServerTickRateManager manager = manager();

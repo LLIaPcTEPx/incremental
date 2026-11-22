@@ -1,5 +1,6 @@
 package ru.incremental.mixin;
 
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.PauseScreen;
@@ -17,8 +18,9 @@ import ru.incremental.screen.TasConfigScreen;
 /**
  * Adds exactly two TAS buttons to the in-game pause menu: "TAS settings" and "Recordings".
  *
- * <p>The vanilla menu is a two-column grid centred at a quarter of the screen height. The buttons
- * are placed in a third row underneath the grid, where the layout leaves free space.</p>
+ * <p>The vanilla menu places its own grid at a quarter of the screen height; the two buttons are put
+ * directly underneath the last vanilla button, so they never overlap no matter the GUI scale or the
+ * window size.</p>
  */
 @Mixin(PauseScreen.class)
 public abstract class PauseScreenMixin extends Screen {
@@ -32,11 +34,18 @@ public abstract class PauseScreenMixin extends Screen {
 		if (!self.showsPauseMenu()) {
 			return;
 		}
+
+		int bottom = 0;
+		for (Object child : this.children()) {
+			if (child instanceof AbstractWidget widget) {
+				bottom = Math.max(bottom, widget.getY() + widget.getHeight());
+			}
+		}
+		int y = Math.min(bottom + 8, this.height - 28);
+
 		int buttonWidth = 98;
 		int gap = 8;
-		int totalWidth = buttonWidth * 2 + gap;
-		int x = this.width / 2 - totalWidth / 2;
-		int y = this.height / 4 + 122;
+		int x = this.width / 2 - (buttonWidth * 2 + gap) / 2;
 
 		Button config = Button.builder(Component.translatable("incremental.menu.config"), button ->
 						this.minecraft.setScreen(new TasConfigScreen(self)))

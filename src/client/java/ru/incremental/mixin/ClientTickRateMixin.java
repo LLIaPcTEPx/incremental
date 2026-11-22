@@ -3,7 +3,6 @@ package ru.incremental.mixin;
 import net.minecraft.client.Minecraft;
 
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
@@ -19,11 +18,6 @@ import ru.incremental.tas.TasController;
  */
 @Mixin(Minecraft.class)
 public abstract class ClientTickRateMixin {
-	@Shadow
-	private float getTickTargetMillis(float defaultTickTargetMillis) {
-		throw new AssertionError();
-	}
-
 	@Inject(method = "getTickTargetMillis", at = @At("HEAD"), cancellable = true)
 	private void incremental$overrideTickTarget(float defaultTickTargetMillis, CallbackInfoReturnable<Float> cir) {
 		float target = TasController.clientTickTargetMillis();

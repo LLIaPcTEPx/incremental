@@ -32,6 +32,11 @@ public abstract class TasScreen extends Screen {
 	protected int panelHeight;
 	protected int contentTop;
 
+	/** Rows of a scrollable list that fit into {@code height} at the current GUI scale. */
+	protected static int fitRows(int height, int reserved, int rowHeight) {
+		return Math.max(2, (height - reserved) / rowHeight);
+	}
+
 	protected TasScreen(Component title, Screen parent) {
 		super(title);
 		this.parent = parent;

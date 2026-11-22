@@ -26,13 +26,13 @@ import ru.incremental.tas.TasSession;
  */
 public class RecordingsScreen extends TasScreen {
 	private static final int ROW_H = 22;
-	private static final int LIST_ROWS = 8;
 
 	private int scroll;
 	private int listX;
 	private int listY;
 	private int listWidth;
 	private int listHeight;
+	private int listRows = 6;
 	private String deleteCandidate;
 	private long deleteCandidateUntil;
 
@@ -51,7 +51,9 @@ public class RecordingsScreen extends TasScreen {
 		listX = panelX + 8;
 		listY = contentTop;
 		listWidth = panelWidth - 16;
-		listHeight = LIST_ROWS * ROW_H;
+		// Title header, two button rows, the save row, the status line and the footer.
+		listRows = fitRows(panelHeight, 28 + 24 + 24 + 24 + 60, ROW_H);
+		listHeight = listRows * ROW_H;
 
 		int y = listY + listHeight + 6;
 		int half = (listWidth - 4) / 2;
@@ -147,7 +149,7 @@ public class RecordingsScreen extends TasScreen {
 	}
 
 	private int maxScroll() {
-		return Math.max(0, rowCount() - LIST_ROWS);
+		return Math.max(0, rowCount() - listRows);
 	}
 
 	@Override
@@ -158,7 +160,7 @@ public class RecordingsScreen extends TasScreen {
 		int rows = recordings.size() + 1;
 
 		graphics.enableScissor(listX, listY, listX + listWidth, listY + listHeight);
-		for (int row = 0; row < LIST_ROWS; row++) {
+		for (int row = 0; row < listRows; row++) {
 			int index = row + scroll;
 			if (index >= rows) {
 				break;
@@ -200,7 +202,7 @@ public class RecordingsScreen extends TasScreen {
 		if (maxScroll() > 0) {
 			int barX = listX + listWidth - 3;
 			graphics.fill(barX, listY, barX + 2, listY + listHeight, 0xFF20242C);
-			float ratio = (float) LIST_ROWS / rows;
+			float ratio = (float) listRows / rows;
 			int thumb = Math.max(12, (int) (listHeight * ratio));
 			int offset = (int) ((listHeight - thumb) * ((float) scroll / maxScroll()));
 			graphics.fill(barX, listY + offset, barX + 2, listY + offset + thumb, ACCENT_SOFT);
@@ -224,7 +226,7 @@ public class RecordingsScreen extends TasScreen {
 				&& event.y() >= listY && event.y() < listY + listHeight) {
 			List<Recording> recordings = RecordingStorage.all();
 			int rows = recordings.size() + 1;
-			for (int row = 0; row < LIST_ROWS; row++) {
+			for (int row = 0; row < listRows; row++) {
 				int index = row + scroll;
 				if (index >= rows) {
 					break;
