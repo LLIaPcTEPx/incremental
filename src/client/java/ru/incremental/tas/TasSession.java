@@ -101,6 +101,17 @@ public final class TasSession {
 		state = State.RECORDING;
 	}
 
+	/** Called when a take starts: frames after the take's first frame are stale and get dropped. */
+	static void truncateFromRecordingStart() {
+		Recording recording = selected();
+		if (recording == null) {
+			return;
+		}
+		while (recording.size() > recordCursor) {
+			recording.remove(recording.size() - 1);
+		}
+	}
+
 	public static int recordCursor() {
 		return recordCursor;
 	}

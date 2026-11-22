@@ -47,10 +47,10 @@ public final class TasFreeze {
 			}
 			return;
 		}
+		// A step that is still queued is dropped as well, otherwise the world would run one more
+		// tick right after it was unfrozen.
 		stepPending = false;
-		if (manager.stopStepping()) {
-			// The step flag is cleared, the freeze itself follows below.
-		}
+		manager.stopStepping();
 		if (manager.isFrozen()) {
 			manager.setFrozen(false);
 		}

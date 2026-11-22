@@ -54,7 +54,11 @@ public final class TasController {
 		// covers is overwritten.
 		TasPlaybackInput.uninstall(Minecraft.getInstance());
 		TasSession.beginRecording(Math.min(TasSession.playhead(), recording.size()));
+		TasSession.truncateFromRecordingStart();
 		TasFreeze.setFrozen(false);
+		if (client().mouseHandler != null && client().screen == null && !client().mouseHandler.isMouseGrabbed()) {
+			client().mouseHandler.grabMouse();
+		}
 		TasSession.flash("incremental.msg.rec_start", Component.literal(recording.name));
 	}
 
@@ -119,6 +123,10 @@ public final class TasController {
 			Minecraft.getInstance().setScreen(null);
 		}
 		applySpeed();
+		Minecraft client = Minecraft.getInstance();
+		if (client.screen == null && !client.mouseHandler.isMouseGrabbed()) {
+			client.mouseHandler.grabMouse();
+		}
 		TasSession.flash("incremental.msg.play_start", Component.literal(recording.name));
 	}
 
@@ -298,6 +306,10 @@ public final class TasController {
 
 	public static float clientTickTargetMillis() {
 		return TasSession.isPlayingActive() ? clientTickTargetMillis : 0.0F;
+	}
+
+	private static Minecraft client() {
+		return Minecraft.getInstance();
 	}
 
 	private static ServerTickRateManager manager() {

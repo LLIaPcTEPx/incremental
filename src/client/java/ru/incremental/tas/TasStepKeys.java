@@ -19,8 +19,6 @@ public final class TasStepKeys {
 
 	private static final long[] pressedAt = new long[TasKey.values().length];
 	private static final long[] repeatedAt = new long[TasKey.values().length];
-	private static boolean prevAttack;
-	private static boolean prevUse;
 
 	private TasStepKeys() {
 	}
@@ -129,7 +127,5 @@ public final class TasStepKeys {
 			pressedAt[i] = 0L;
 			repeatedAt[i] = 0L;
 		}
-		prevAttack = false;
-		prevUse = false;
 	}
 }

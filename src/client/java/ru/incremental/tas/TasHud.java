@@ -54,6 +54,14 @@ public final class TasHud {
 				graphics.drawCenteredString(client.font, label, centerX, y, 0xFFFFFFFF);
 				y += 10;
 			}
+			// Game time of the world: the tick a TAS run is measured in. Two runs are comparable
+			// only when this number matches, which makes it the most useful thing on screen.
+			if (client.level != null && TasSession.isBusy()) {
+				String ticks = "tick " + client.level.getGameTime()
+						+ "   speed " + TasController.speedLabel(IncrementalConfig.tickRate).getString();
+				graphics.drawCenteredString(client.font, Component.literal(ticks), centerX, y, 0xFF9AA3B2);
+				y += 10;
+			}
 			RecordedFrame frame = currentFrame();
 			if (frame != null) {
 				graphics.drawCenteredString(client.font,
