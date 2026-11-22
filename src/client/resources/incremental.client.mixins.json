@@ -1,0 +1,16 @@
+{
+	"required": true,
+	"package": "ru.incremental.mixin",
+	"compatibilityLevel": "JAVA_21",
+	"client": [
+		"PauseScreenMixin",
+		"MinecraftMixin",
+		"LocalPlayerMixin",
+		"MouseHandlerMixin",
+		"GameRendererMixin",
+		"GuiRendererMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

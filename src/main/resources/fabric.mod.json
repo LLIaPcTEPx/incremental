@@ -1,0 +1,34 @@
+{
+	"schemaVersion": 1,
+	"id": "incremental",
+	"version": "${version}",
+	"name": "Incremental — TAS",
+	"description": "Tool Assisted Speedrun for Minecraft: record every tick of your input, review it frame by frame, fix mistakes and play it back with full determinism (single-player only).",
+	"authors": [
+		"LLIaPcTEPx"
+	],
+	"contact": {
+		"homepage": "https://github.com/LLIaPcTEPx/incremental",
+		"sources": "https://github.com/LLIaPcTEPx/incremental"
+	},
+	"license": "MIT",
+	"icon": "assets/incremental/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"ru.incremental.IncrementalClient"
+		]
+	},
+	"mixins": [
+		{
+			"config": "incremental.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
