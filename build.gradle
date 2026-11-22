@@ -62,6 +62,13 @@ jar {
 	}
 }
 
+remapJar {
+	// Keep the licence inside the distributable jar as well.
+	from("LICENSE") {
+		rename { "${it}_${project.name}" }
+	}
+}
+
 publishing {
 	publications {
 		create("mavenJava", MavenPublication) {
