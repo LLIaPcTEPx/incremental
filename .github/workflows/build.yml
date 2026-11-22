@@ -28,8 +28,6 @@ jobs:
           set -o pipefail
           ./gradlew build --stacktrace --console=plain > /tmp/build.log 2>&1 || true
           tail -n 400 /tmp/build.log > ci-build-log.txt
-          cp /tmp/build.log /tmp/full.log
-          ./gradlew --version >/dev/null 2>&1 || true
           grep -q "BUILD SUCCESSFUL" /tmp/build.log
       - name: publish log
         if: always()
@@ -40,7 +38,20 @@ jobs:
           git commit -m "ci: build log [skip ci]" || true
           git push || true
       - name: capture build artifacts
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: incremental
-          path: build/libs/
+          path: build/libs/*.jar
+      - name: publish jar to the latest build release
+        if: success() && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=build-latest
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "Latest build" --notes "Automatically built mod jar. Download the file named incremental-*.jar"
+          for f in build/libs/incremental-*.jar; do
+            case "$f" in *-sources.jar|*-dev.jar) continue;; esac
+            gh release upload "$TAG" "$f" --clobber
+          done
