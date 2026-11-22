@@ -1,5 +1,13 @@
 name: build
-on: [pull_request, push, workflow_dispatch]
+on:
+  push:
+    paths-ignore:
+      - 'ci-build-log.txt'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -15,23 +23,22 @@ jobs:
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
       - name: build
+        id: gradle
         run: |
           set -o pipefail
-          ./gradlew build --stacktrace --console=plain 2>&1 | tee /tmp/build.log
-          status=${PIPESTATUS[0]}
-          if [ $status -ne 0 ]; then
-            { echo "### build errors"; grep -n -m 30 -E "error:|What went wrong|Caused by:" /tmp/build.log | head -40; echo; echo "### tail"; tail -n 25 /tmp/build.log; } | tee error-summary.txt
-            exit 1
-          fi
-      - name: report errors
-        if: failure()
+          ./gradlew build --stacktrace --console=plain > /tmp/build.log 2>&1 || true
+          tail -n 400 /tmp/build.log > ci-build-log.txt
+          cp /tmp/build.log /tmp/full.log
+          ./gradlew --version >/dev/null 2>&1 || true
+          grep -q "BUILD SUCCESSFUL" /tmp/build.log
+      - name: publish log
+        if: always()
         run: |
-          {
-            echo "## build failed"
-            echo '```'
-            cat error-summary.txt 2>/dev/null || echo "no summary"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          git config user.email "ci@incremental"
+          git config user.name "incremental-ci"
+          git add -f ci-build-log.txt
+          git commit -m "ci: build log [skip ci]" || true
+          git push || true
       - name: capture build artifacts
         uses: actions/upload-artifact@v4
         with:
