@@ -15,7 +15,15 @@ jobs:
       - name: make gradle wrapper executable
         run: chmod +x ./gradlew
       - name: build
-        run: ./gradlew build --stacktrace --console=plain 2>&1 | tail -400
+        run: |
+          set -o pipefail
+          ./gradlew build --stacktrace --console=plain > build.log 2>&1 && echo BUILD_OK || {
+            echo "--- build failed, errors ---"
+            grep -n -m 40 -E "error:|FAILURE:|What went wrong|Caused by:|Could not|e: " build.log | head -60
+            echo "--- tail ---"
+            tail -n 100 build.log
+            exit 1
+          }
       - name: capture build artifacts
         uses: actions/upload-artifact@v4
         with:
