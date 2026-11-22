@@ -3,10 +3,13 @@ package ru.incremental.tas;
 import net.minecraft.world.entity.player.Input;
 
 /**
- * One "frame" of a TAS recording: everything the player did during one game tick.
+ * One tick of a TAS recording.
  *
- * <p>Fields mirror vanilla's {@link Input} record (movement keys, jump, sneak, sprint) plus the
- * mouse buttons, the selected hotbar slot and the camera motion accumulated during that tick.</p>
+ * <p>A frame stores the input flags vanilla reads on the client (movement keys, jump, sneak,
+ * sprint), the mouse buttons and the selected hotbar slot, plus the camera state. The camera is
+ * stored as absolute rotation: mouse deltas are scaled by the client's sensitivity, so replaying
+ * deltas would break as soon as the sensitivity setting changes. Absolute rotation is also what the
+ * server receives, which keeps the replay identical to the original take.</p>
  */
 public final class RecordedFrame {
 	public boolean forward;
@@ -19,6 +22,7 @@ public final class RecordedFrame {
 	public boolean attack;
 	public boolean use;
 	public int hotbar;
+	/** Absolute camera rotation at the end of this tick, in degrees. */
 	public float yaw;
 	public float pitch;
 
@@ -63,5 +67,24 @@ public final class RecordedFrame {
 		RecordedFrame frame = new RecordedFrame();
 		frame.hotbar = 0;
 		return frame;
+	}
+
+	/** Short human readable summary used by the HUD and the frame list. */
+	public String describe() {
+		StringBuilder keys = new StringBuilder();
+		if (forward) keys.append("W");
+		if (backward) keys.append("S");
+		if (left) keys.append("A");
+		if (right) keys.append("D");
+		if (jump) keys.append("J");
+		if (shift) keys.append("⇧");
+		if (sprint) keys.append("⤢");
+		if (attack) keys.append("LMB");
+		if (use) keys.append("RMB");
+		if (keys.isEmpty()) {
+			keys.append("—");
+		}
+		return "[" + keys + "]  slot " + (hotbar + 1)
+				+ String.format("  yaw %.0f  pitch %.0f", yaw, pitch);
 	}
 }

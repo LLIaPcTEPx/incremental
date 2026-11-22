@@ -1,107 +1,154 @@
 package ru.incremental.tas;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 
 /**
- * Frame stepping during playback.
+ * Frame-by-frame navigation.
  *
- * <p>While playback is paused the world is frozen (the integrated server does not advance). The
- * "next frame" action asks for exactly one game tick and advances the playhead, which applies the
- * next recorded frame to the player on that tick. "Previous frame" is a cheap rewind: the recorded
- * camera rotation of the frame before the playhead is re-applied so the frame can be inspected.</p>
+ * <p>While playback is paused the world is frozen, so the player stands still and a single step
+ * means: let exactly one server tick run with the recorded frame applied. Stepping backwards (and
+ * stepping while not playing at all) only moves an inspection cursor and previews the recorded
+ * camera pose, because a Minecraft world cannot be rewound — real rewinding means loading a save,
+ * which is exactly the workflow frame stepping is meant to support.</p>
  */
 public final class TasStep {
+	private static RecordedFrame armedFrame;
+	private static boolean awaitingTick;
+
 	private TasStep() {
 	}
 
-	/** Requests one game tick and moves the playhead forward when that tick has run. */
-	public static void stepNextFrame() {
+	/** Frame that must be written into the game at the next client tick. */
+	static RecordedFrame armedFrame() {
+		return armedFrame;
+	}
+
+	static void clearArmedFrame() {
+		armedFrame = null;
+	}
+
+	/** Discards a step in flight, e.g. when playback is paused or stopped by the user. */
+	public static void clearPlaybackFrame() {
+		armedFrame = null;
+		awaitingTick = false;
+		Minecraft client = Minecraft.getInstance();
+		if (client.player != null && client.player.input instanceof TasPlaybackInput) {
+			((TasPlaybackInput) client.player.input).clear();
+		}
+	}
+
+	public static void reset() {
+		armedFrame = null;
+		awaitingTick = false;
+	}
+
+	/** Called once per client tick to notice when the requested tick has run. */
+	public static void tick() {
+		if (!awaitingTick) {
+			return;
+		}
+		if (TasFreeze.stepPending()) {
+			return;
+		}
+		awaitingTick = false;
 		Recording recording = TasSession.selected();
-		if (TasSession.isRecording()) {
-			TasSession.flash("incremental.msg.playback_not_recording");
-			return;
-		}
-		if (recording == null || recording.size() == 0) {
-			TasSession.flash("incremental.msg.frame_empty");
-			return;
-		}
-		if (!TasSession.isPlaying()) {
-			// Not playing: only move the inspection cursor.
+		if (recording != null) {
 			TasSession.setPlayhead(Math.min(recording.size(), TasSession.playhead() + 1));
 			TasSession.flash("incremental.msg.frame", TasSession.playhead(), recording.size());
-			return;
 		}
-		if (TasSession.state() != TasSession.State.PLAY_PAUSED) {
-			// Playing normally — pause first so single stepping makes sense.
-			TasController.togglePlaybackPause();
-		}
-		if (TasSession.playhead() >= recording.size()) {
-			TasSession.flash("incremental.msg.frame_empty");
-			return;
-		}
-		TasFreeze.stepFrame(() -> {
-			// The tick ran: apply the frame that is now current so the next step starts from it.
-			Minecraft client = Minecraft.getInstance();
-			int tick = TasSession.playhead();
-			if (tick < recording.size()) {
-				TasController.applyFrame(client, recording.get(tick));
-				TasSession.setPlayhead(tick + 1);
-			}
-			TasSession.flash("incremental.msg.frame", TasSession.playhead(), recording.size());
-		});
 	}
 
-	/** Steps back one recorded frame and previews it. */
-	public static void stepPrevFrame() {
-		Recording recording = TasSession.selected();
-		if (recording == null || recording.size() == 0) {
-			TasSession.flash("incremental.msg.frame_empty");
-			return;
-		}
-		if (TasSession.state() == TasSession.State.PLAYING) {
-			TasController.togglePlaybackPause();
-		}
-		int tick = Math.max(0, TasSession.playhead() - 1);
-		TasSession.setPlayhead(tick);
-		if (TasSession.isPlaying()) {
-			TasController.applyFrame(Minecraft.getInstance(), recording.get(tick));
-			TasFreeze.setFrozen(true);
-		}
-		TasSession.flash("incremental.msg.frame", tick + 1, recording.size());
+	public static boolean busy() {
+		return awaitingTick;
 	}
 
-	public static void stepBack(int frames) {
-		Recording recording = TasSession.selected();
-		if (recording == null || recording.size() == 0) {
-			TasSession.flash("incremental.msg.frame_empty");
-			return;
-		}
-		if (TasSession.state() == TasSession.State.PLAYING) {
-			TasController.togglePlaybackPause();
-		}
-		int tick = Math.max(0, TasSession.playhead() - frames);
-		TasSession.setPlayhead(tick);
-		if (TasSession.isPlaying()) {
-			TasController.applyFrame(Minecraft.getInstance(), recording.get(tick));
-		}
-		TasSession.flash("incremental.msg.rewound", tick);
-	}
+	// ------------------------------------------------------------ actions
 
+	/** G ("next frame") and the frame button of the edit screen. */
 	public static void stepForward(int frames) {
 		Recording recording = TasSession.selected();
 		if (recording == null || recording.size() == 0) {
 			TasSession.flash("incremental.msg.frame_empty");
 			return;
 		}
-		int tick = Math.min(recording.size(), TasSession.playhead() + frames);
-		TasSession.setPlayhead(tick);
-		TasSession.flash("incremental.msg.forwarded", tick);
+		if (!TasSession.isPlaying()) {
+			moveCursor(recording, frames, true);
+			return;
+		}
+		if (TasSession.state() != TasSession.State.PLAY_PAUSED) {
+			TasController.togglePlaybackPause();
+		}
+		if (frames != 1) {
+			// Big jumps only move the cursor: running a burst of frozen ticks is what "resume"
+			// already does, and doing it here would silently run the world.
+			moveCursor(recording, frames, false);
+			return;
+		}
+		stepOneTick(recording);
 	}
 
-	public static void fastForwardWhilePlaying() {
-		Minecraft client = Minecraft.getInstance();
-		if (TasSession.isPlaying() && client.getSingleplayerServer() != null) {
-			client.getSingleplayerServer().tickRateManager().setTickRate((float) IncrementalConfig.tickRate);
+	private static void stepOneTick(Recording recording) {
+		int tick = TasSession.playhead();
+		if (tick >= recording.size()) {
+			TasSession.flash("incremental.msg.frame_empty");
+			return;
 		}
+		if (awaitingTick) {
+			return;
+		}
+		if (!TasFreeze.isAvailable()) {
+			TasSession.flash("incremental.msg.singleplayer");
+			return;
+		}
+		TasFreeze.setFrozen(true);
+		armedFrame = recording.get(tick);
+		awaitingTick = true;
+		TasFreeze.requestStep();
+	}
+
+	/** F ("previous frame") and R (rewind). */
+	public static void stepBack(int frames) {
+		Recording recording = TasSession.selected();
+		if (recording == null || recording.size() == 0) {
+			TasSession.flash("incremental.msg.frame_empty");
+			return;
+		}
+		if (TasSession.isPlayingActive()) {
+			TasController.togglePlaybackPause();
+		}
+		moveCursor(recording, -frames, false);
+	}
+
+	private static void moveCursor(Recording recording, int delta, boolean forward) {
+		int tick = Math.max(0, Math.min(recording.size(), TasSession.playhead() + delta));
+		TasSession.setPlayhead(tick);
+		if (tick > 0) {
+			previewPose(recording.get(tick - 1));
+		}
+		if (forward) {
+			TasSession.flash("incremental.msg.frame", tick, recording.size());
+		} else {
+			TasSession.flash(delta == -1 ? "incremental.msg.frame" : "incremental.msg.rewound", tick, recording.size());
+		}
+	}
+
+	/** Shows a recorded camera pose without touching the world. */
+	private static void previewPose(RecordedFrame frame) {
+		Minecraft client = Minecraft.getInstance();
+		if (client.player == null || frame == null) {
+			return;
+		}
+		TasController.applyCamera(client.player, frame);
+		if (frame.hotbar >= 0 && frame.hotbar < 9) {
+			client.player.getInventory().setSelectedSlot(frame.hotbar);
+		}
+	}
+
+	public static Component frameLabel(Recording recording) {
+		if (recording == null) {
+			return Component.empty();
+		}
+		return Component.translatable("incremental.msg.frame", TasSession.playhead(), recording.size());
 	}
 }

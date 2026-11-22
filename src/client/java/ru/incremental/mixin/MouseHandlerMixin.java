@@ -1,26 +1,25 @@
 package ru.incremental.mixin;
 
 import net.minecraft.client.MouseHandler;
-import net.minecraft.client.player.LocalPlayer;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import ru.incremental.tas.TasMotion;
+import ru.incremental.tas.TasController;
 import ru.incremental.tas.TasSession;
 
 /**
- * Captures the camera motion accumulated per tick while recording, and ignores the physical mouse
- * while a recording is being replayed (playback drives the camera instead).
+ * While a recording is replayed the camera belongs to the recording, so physical mouse movement must
+ * not rotate the player.
  */
 @Mixin(MouseHandler.class)
 public abstract class MouseHandlerMixin {
-	@Redirect(method = "turnPlayer", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/player/LocalPlayer;turn(DD)V"))
-	private void incremental$captureTurn(LocalPlayer player, double dx, double dy) {
-		TasMotion.onMouseTurn(dx, dy);
-		if (!TasSession.isPlaying()) {
-			player.turn(dx, dy);
+	@Inject(method = "turnPlayer", at = @At("HEAD"), cancellable = true)
+	private void incremental$blockManualTurn(double mousea, CallbackInfo ci) {
+		if (TasSession.isPlaying()) {
+			ci.cancel();
 		}
 	}
 }

@@ -10,13 +10,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import ru.incremental.tas.TasController;
 
 /**
- * The player tick starts here, before vanilla reads the input in {@code aiStep}. This is where a
- * frame is recorded, or where the next recorded frame is pushed into the input handler.
+ * End of the player tick: vanilla has consumed this tick's input, so this is the exact state that
+ * has to be written into the recording.
  */
 @Mixin(LocalPlayer.class)
 public abstract class LocalPlayerMixin {
-	@Inject(method = "tick", at = @At("HEAD"))
-	private void incremental$tasInput(CallbackInfo ci) {
-		TasController.onPlayerInputTick();
+	@Inject(method = "tick", at = @At("TAIL"))
+	private void incremental$tickEnd(CallbackInfo ci) {
+		TasController.onPlayerTickEnd();
 	}
 }

@@ -5,10 +5,11 @@
 	"client": [
 		"PauseScreenMixin",
 		"MinecraftMixin",
+		"ClientTickRateMixin",
 		"LocalPlayerMixin",
 		"MouseHandlerMixin",
 		"GameRendererMixin",
-		"GuiRendererMixin"
+		"KeyMappingAccessor"
 	],
 	"injectors": {
 		"defaultRequire": 1

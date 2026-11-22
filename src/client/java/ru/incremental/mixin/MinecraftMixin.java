@@ -8,26 +8,27 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import ru.incremental.tas.TasFreeze;
+import ru.incremental.tas.TasController;
 import ru.incremental.tas.TasSession;
 
 /**
- * Keeps the freeze state in sync with the game and stops everything when the world is left.
+ * Hooks the very beginning of the client tick. The playback frame is written here, before vanilla
+ * reads the key bindings, so a recorded click is consumed in the same tick it belongs to.
  */
 @Mixin(Minecraft.class)
 public abstract class MinecraftMixin {
-	@Inject(method = "setScreen", at = @At("TAIL"))
-	private void incremental$onScreenChanged(Screen screen, CallbackInfo ci) {
+	@Inject(method = "tick", at = @At("HEAD"))
+	private void incremental$tickStart(CallbackInfo ci) {
 		Minecraft client = (Minecraft) (Object) this;
-		if (client.level == null || client.getSingleplayerServer() == null) {
-			return;
+		TasController.onClientTickStart();
+		// Leaving the world (disconnect, quitting to title) resets everything.
+		if (client.player == null && TasSession.isBusy()) {
+			TasSession.worldUnloaded();
 		}
-		TasFreeze.applyScreenState(screen instanceof ru.incremental.screen.TasScreen);
 	}
 
-	@Inject(method = "disconnect(Lnet/minecraft/client/gui/screens/Screen;ZZ)V", at = @At("HEAD"))
-	private void incremental$onDisconnect(Screen screen, boolean keepResourcePacks, boolean stopSound, CallbackInfo ci) {
-		TasFreeze.shutdown();
-		TasSession.worldUnloaded();
+	@Inject(method = "setScreen", at = @At("TAIL"))
+	private void incremental$screenChanged(Screen screen, CallbackInfo ci) {
+		TasController.onScreenChanged((Minecraft) (Object) this, screen);
 	}
 }

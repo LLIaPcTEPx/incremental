@@ -15,22 +15,27 @@ import com.google.gson.JsonParser;
 import com.mojang.blaze3d.platform.InputConstants;
 
 import net.minecraft.client.Minecraft;
-import org.lwjgl.glfw.GLFW;
+import net.minecraft.client.KeyMapping;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Small JSON config for the mod: hotkeys (as raw GLFW key codes) and a few playback options.
+ * JSON config of the mod: the hotkeys (raw GLFW codes) and a few playback options. Everything lives
+ * in {@code <game dir>/incremental/config.json}, next to the recordings.
  */
 public final class IncrementalConfig {
 	private static final Logger LOGGER = LoggerFactory.getLogger("Incremental/TAS");
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
-	private static final LinkedHashMap<String, Integer> KEYS = new LinkedHashMap<>();
+	private static final Map<String, Integer> KEYS = new LinkedHashMap<>();
 
+	/** Playback speed in ticks per second; 20 is normal game speed. */
 	public static double tickRate = 20.0D;
-	public static boolean recordMotion = true;
+	/** Replay the recorded camera rotation. */
+	public static boolean recordCamera = true;
+	/** Show the TAS status above the hotbar. */
 	public static boolean showOverlay = true;
+	/** Freeze the world while a TAS screen is open. */
 	public static boolean freezeWhileManaging = true;
 
 	static {
@@ -54,26 +59,18 @@ public final class IncrementalConfig {
 
 	public static int getKey(TasKey key) {
 		if (key == null) {
-			return GLFW.GLFW_KEY_UNKNOWN;
-		}
-		if (!key.configurable) {
-			return GLFW.GLFW_KEY_UNKNOWN;
+			return org.lwjgl.glfw.GLFW.GLFW_KEY_UNKNOWN;
 		}
 		Integer stored = KEYS.get(key.id);
 		return stored == null ? key.defaultKey : stored;
 	}
 
 	public static void setKey(TasKey key, int glfwCode) {
-		if (key == null || !key.configurable) {
+		if (key == null) {
 			return;
 		}
 		KEYS.put(key.id, glfwCode);
-
-		// Keep the vanilla key mapping in sync so the Controls screen and tooltips agree.
-		var mapping = TasKey.mapping(key);
-		if (mapping != null) {
-			mapping.setKey(InputConstants.Type.KEYSYM.getOrCreate(glfwCode));
-		}
+		syncMapping(key);
 		save();
 	}
 
@@ -84,17 +81,14 @@ public final class IncrementalConfig {
 	public static void resetAllKeys() {
 		for (TasKey key : TasKey.BINDABLE) {
 			KEYS.put(key.id, key.defaultKey);
-			var mapping = TasKey.mapping(key);
-			if (mapping != null) {
-				mapping.setKey(InputConstants.Type.KEYSYM.getOrCreate(key.defaultKey));
-			}
+			syncMapping(key);
 		}
 		save();
 	}
 
 	/** True when another bindable action already uses this key. */
 	public static boolean keyUsedBy(TasKey self, int glfwCode) {
-		if (glfwCode == GLFW.GLFW_KEY_UNKNOWN) {
+		if (glfwCode == org.lwjgl.glfw.GLFW.GLFW_KEY_UNKNOWN) {
 			return false;
 		}
 		for (TasKey key : TasKey.BINDABLE) {
@@ -103,6 +97,26 @@ public final class IncrementalConfig {
 			}
 		}
 		return false;
+	}
+
+	/** Mirrors a config binding into the vanilla key mapping. */
+	public static void syncMapping(TasKey key) {
+		KeyMapping mapping = TasKey.mapping(key);
+		if (mapping == null) {
+			return;
+		}
+		int code = getKey(key);
+		InputConstants.Key bound = code < 0
+				? InputConstants.Type.MOUSE.getOrCreate(-100 - code)
+				: InputConstants.Type.KEYSYM.getOrCreate(code);
+		mapping.setKey(bound);
+	}
+
+	public static void syncAllMappings() {
+		for (TasKey key : TasKey.BINDABLE) {
+			syncMapping(key);
+		}
+		KeyMapping.resetMapping();
 	}
 
 	// ---------------------------------------------------------------- io
@@ -123,7 +137,7 @@ public final class IncrementalConfig {
 				}
 			}
 			tickRate = clampRate(root.has("tickRate") ? root.get("tickRate").getAsDouble() : tickRate);
-			recordMotion = readBoolean(root, "recordMotion", recordMotion);
+			recordCamera = readBoolean(root, "recordCamera", recordCamera);
 			showOverlay = readBoolean(root, "showOverlay", showOverlay);
 			freezeWhileManaging = readBoolean(root, "freezeWhileManaging", freezeWhileManaging);
 		} catch (Exception e) {
@@ -137,7 +151,7 @@ public final class IncrementalConfig {
 		KEYS.forEach(keys::addProperty);
 		root.add("keys", keys);
 		root.addProperty("tickRate", tickRate);
-		root.addProperty("recordMotion", recordMotion);
+		root.addProperty("recordCamera", recordCamera);
 		root.addProperty("showOverlay", showOverlay);
 		root.addProperty("freezeWhileManaging", freezeWhileManaging);
 		try {

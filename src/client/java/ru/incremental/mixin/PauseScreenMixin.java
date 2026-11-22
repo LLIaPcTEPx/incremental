@@ -15,7 +15,10 @@ import ru.incremental.screen.RecordingsScreen;
 import ru.incremental.screen.TasConfigScreen;
 
 /**
- * Adds the two TAS buttons to the in-game pause menu: "Настройка мода" and "Выбор записи".
+ * Adds exactly two TAS buttons to the in-game pause menu: "TAS settings" and "Recordings".
+ *
+ * <p>The vanilla menu is a two-column grid centred at a quarter of the screen height. The buttons
+ * are placed in a third row underneath the grid, where the layout leaves free space.</p>
  */
 @Mixin(PauseScreen.class)
 public abstract class PauseScreenMixin extends Screen {
@@ -25,23 +28,23 @@ public abstract class PauseScreenMixin extends Screen {
 
 	@Inject(method = "init", at = @At("TAIL"))
 	private void incremental$addTasButtons(CallbackInfo ci) {
-		if (!((PauseScreen) (Object) this).showsPauseMenu()) {
+		PauseScreen self = (PauseScreen) (Object) this;
+		if (!self.showsPauseMenu()) {
 			return;
 		}
 		int buttonWidth = 98;
 		int gap = 8;
 		int totalWidth = buttonWidth * 2 + gap;
 		int x = this.width / 2 - totalWidth / 2;
-		// Sits right under the vanilla button grid (which ends above the footer).
 		int y = this.height / 4 + 122;
 
 		Button config = Button.builder(Component.translatable("incremental.menu.config"), button ->
-						this.minecraft.setScreen(new TasConfigScreen((PauseScreen) (Object) this)))
+						this.minecraft.setScreen(new TasConfigScreen(self)))
 				.bounds(x, y, buttonWidth, 20)
 				.tooltip(Tooltip.create(Component.translatable("incremental.menu.config.tooltip")))
 				.build();
 		Button recordings = Button.builder(Component.translatable("incremental.menu.recordings"), button ->
-						this.minecraft.setScreen(new RecordingsScreen((PauseScreen) (Object) this)))
+						this.minecraft.setScreen(new RecordingsScreen(self)))
 				.bounds(x + buttonWidth + gap, y, buttonWidth, 20)
 				.tooltip(Tooltip.create(Component.translatable("incremental.menu.recordings.tooltip")))
 				.build();

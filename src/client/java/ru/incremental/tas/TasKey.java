@@ -10,48 +10,40 @@ import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * Every hotkey of the mod. The binding itself lives in an {@link InputConstants.Key} inside the
- * mod config (so it is saved next to the recordings), while a hidden {@link KeyMapping} exposes the
- * same binding in the vanilla "Controls" screen.
+ * Every hotkey of the mod.
+ *
+ * <p>The binding lives in the mod config as a raw GLFW code (mouse buttons are stored as
+ * {@code -100 - button}), while a matching {@link KeyMapping} mirrors it in the vanilla "Controls"
+ * screen. The mappings are never polled directly — hotkeys are read from GLFW so they also work
+ * while the world is frozen — but they give the user the familiar controls UI and the
+ * {@code key.incremental.*} translations.</p>
  */
 public enum TasKey {
-	START_RECORD("start_record", "Начать запись", GLFW.GLFW_KEY_INSERT),
-	STOP_RECORD("stop_record", "Остановка записи", GLFW.GLFW_KEY_END),
-	TOGGLE_PAUSE("toggle_pause", "Пауза записи", GLFW.GLFW_KEY_C),
-	SPEED_UP("speed_up", "Увеличение скорости", GLFW.GLFW_KEY_PERIOD),
-	SPEED_DOWN("speed_down", "Уменьшение скорости", GLFW.GLFW_KEY_COMMA),
-	REWIND("rewind", "Назад", GLFW.GLFW_KEY_R),
-	FORWARD("forward", "Вперёд", GLFW.GLFW_KEY_T),
-	PREV_FRAME("prev_frame", "Назад на 1 кадр", GLFW.GLFW_KEY_F),
-	NEXT_FRAME("next_frame", "Вперёд на 1 кадр", GLFW.GLFW_KEY_G),
-	NEW_FRAME("new_frame", "Новый кадр", GLFW.GLFW_KEY_V),
-	SAVE("save", "Сохранение", GLFW.GLFW_KEY_LEFT_BRACKET),
-	PLAY("play", "Воспроизведение выбранной записи", GLFW.GLFW_KEY_RIGHT_BRACKET),
-	NEW_ENTRY("new_entry", "Создать запись", GLFW.GLFW_KEY_UNKNOWN);
+	START_RECORD("start_record", GLFW.GLFW_KEY_INSERT),
+	STOP_RECORD("stop_record", GLFW.GLFW_KEY_END),
+	TOGGLE_PAUSE("toggle_pause", GLFW.GLFW_KEY_C),
+	SPEED_UP("speed_up", GLFW.GLFW_KEY_PERIOD),
+	SPEED_DOWN("speed_down", GLFW.GLFW_KEY_COMMA),
+	REWIND("rewind", GLFW.GLFW_KEY_R),
+	FORWARD("forward", GLFW.GLFW_KEY_T),
+	PREV_FRAME("prev_frame", GLFW.GLFW_KEY_F),
+	NEXT_FRAME("next_frame", GLFW.GLFW_KEY_G),
+	NEW_FRAME("new_frame", GLFW.GLFW_KEY_V),
+	SAVE("save", GLFW.GLFW_KEY_LEFT_BRACKET),
+	PLAY("play", GLFW.GLFW_KEY_RIGHT_BRACKET);
+
+	/** Keys shown and edited in the settings screen, in this order. */
+	public static final List<TasKey> BINDABLE = List.of(values());
 
 	public final String id;
-	public final String defaultValue;
 	public final int defaultKey;
 	public final String translationKey;
-	public final boolean configurable;
 
-	TasKey(String id, String defaultValue, int defaultKey) {
-		this(id, defaultValue, defaultKey, true);
-	}
-
-	TasKey(String id, String defaultValue, int defaultKey, boolean configurable) {
+	TasKey(String id, int defaultKey) {
 		this.id = id;
-		this.defaultValue = defaultValue;
 		this.defaultKey = defaultKey;
 		this.translationKey = "key.incremental." + id;
-		this.configurable = configurable;
 	}
-
-	/** Keys actually stored in the config and shown in the settings screen. */
-	public static final List<TasKey> BINDABLE = List.of(
-			START_RECORD, STOP_RECORD, TOGGLE_PAUSE, SPEED_UP, SPEED_DOWN,
-			REWIND, FORWARD, PREV_FRAME, NEXT_FRAME, NEW_FRAME, SAVE, PLAY
-	);
 
 	private static KeyMapping.Category category;
 	private static KeyMapping[] mappings;
@@ -79,21 +71,18 @@ public enum TasKey {
 		return mappings == null ? null : mappings[key.ordinal()];
 	}
 
-	public static KeyMapping[] mappings() {
-		return mappings == null ? new KeyMapping[0] : mappings.clone();
-	}
-
-	/** The binding currently in use (config override, otherwise the default). */
+	/** The binding currently in use. */
 	public InputConstants.Key boundKey() {
-		return InputConstants.Type.KEYSYM.getOrCreate(IncrementalConfig.getKey(this));
+		int code = IncrementalConfig.getKey(this);
+		if (code < 0) {
+			return InputConstants.Type.MOUSE.getOrCreate(-100 - code);
+		}
+		return InputConstants.Type.KEYSYM.getOrCreate(code);
 	}
 
-	public static TasKey valueOfKey(String name) {
-		try {
-			return valueOf(name);
-		} catch (IllegalArgumentException e) {
-			return null;
-		}
+	/** Human readable binding, e.g. "Insert" or "Not bound". */
+	public static Component describe(TasKey key) {
+		return key.boundKey().getDisplayName();
 	}
 
 	public static TasKey byId(String id) {
@@ -104,13 +93,4 @@ public enum TasKey {
 		}
 		return null;
 	}
-
-	/** Human readable binding, e.g. "Insert" or "Не назначена". */
-	public static Component describe(InputConstants.Key key) {
-		if (key == null || key.equals(InputConstants.UNKNOWN)) {
-			return Component.translatable("key.keyboard.unknown");
-		}
-		return key.getDisplayName();
-	}
-
 }

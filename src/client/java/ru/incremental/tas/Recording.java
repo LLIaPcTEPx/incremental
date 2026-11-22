@@ -25,6 +25,31 @@ public final class Recording {
 		return frames.get(index);
 	}
 
+	/** Writes a frame at the given index, appending when the index is at the end. */
+	public void put(int index, RecordedFrame frame) {
+		if (index < 0) {
+			return;
+		}
+		while (frames.size() < index) {
+			frames.add(RecordedFrame.empty());
+		}
+		if (index < frames.size()) {
+			frames.set(index, frame);
+		} else {
+			frames.add(frame);
+		}
+	}
+
+	public void insert(int index, RecordedFrame frame) {
+		frames.add(Math.max(0, Math.min(index, frames.size())), frame);
+	}
+
+	public void remove(int index) {
+		if (index >= 0 && index < frames.size()) {
+			frames.remove(index);
+		}
+	}
+
 	public String durationText() {
 		int ticks = frames.size();
 		int seconds = ticks / 20;

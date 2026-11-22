@@ -3,120 +3,125 @@ package ru.incremental.tas;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.server.ServerTickRateManager;
-import net.minecraft.world.TickRateManager;
 
 /**
- * Frame-perfect tick control for single-player.
+ * Freezes the integrated server so the world can be inspected and stepped one tick at a time.
  *
- * <p>The integrated server keeps processing packets (so it never thinks the client timed out) but
- * game elements do not advance while a TAS screen is open or while playback is paused. A single
- * frame step asks for exactly one game tick; the client mirror of that tick runs as well because
- * the client world uses the same tick rate manager.</p>
+ * <p>The freeze is done through the vanilla tick rate manager, which is exactly what
+ * {@code /tick freeze} does: the server keeps running and answering packets (so the client never
+ * times out) but no game logic advances. The client mirrors the state through
+ * {@code ClientboundTickingStatePacket}, so it stops rendering movement as well. One tick is run
+ * with {@code stepGameIfPaused(1)}.</p>
  */
 public final class TasFreeze {
-	private static boolean stepRequested;
-	private static boolean completedThisFrame;
+	private static boolean stepPending;
+	private static long stepStartedAt;
 
 	private TasFreeze() {
 	}
 
-	public static void beginRender() {
-		completedThisFrame = false;
+	private static ServerTickRateManager manager() {
+		Minecraft client = Minecraft.getInstance();
+		IntegratedServer server = client == null ? null : client.getSingleplayerServer();
+		return server == null ? null : server.tickRateManager();
 	}
 
-	public static boolean completedStepThisFrame() {
-		return completedThisFrame;
+	public static boolean isAvailable() {
+		return manager() != null;
 	}
 
 	public static boolean isFrozen() {
-		Minecraft client = Minecraft.getInstance();
-		return client.level != null && client.level.tickRateManager().isFrozen();
+		ServerTickRateManager manager = manager();
+		return manager != null && manager.isFrozen();
 	}
 
-	/** Forces the freeze state; safe to call every tick. */
+	/** Freezes or unfreezes the world. No-op in multiplayer. */
 	public static void setFrozen(boolean frozen) {
-		Minecraft client = Minecraft.getInstance();
-		IntegratedServer server = client == null ? null : client.getSingleplayerServer();
-		if (server == null) {
-			return;
-		}
-		ServerTickRateManager manager = server.tickRateManager();
-		if (manager.isFrozen() == frozen) {
+		ServerTickRateManager manager = manager();
+		if (manager == null) {
 			return;
 		}
 		if (frozen) {
-			manager.setFrozen(true);
-		} else {
-			manager.stopStepping();
+			if (!manager.isFrozen()) {
+				manager.setFrozen(true);
+			}
+			return;
+		}
+		stepPending = false;
+		if (manager.stopStepping()) {
+			// The step flag is cleared, the freeze itself follows below.
+		}
+		if (manager.isFrozen()) {
 			manager.setFrozen(false);
-			stepRequested = false;
 		}
 	}
 
-	public static void unfreezeServer() {
+	public static void unfreeze() {
 		setFrozen(false);
-		stepRequested = false;
 	}
 
 	/**
-	 * Runs exactly one more game tick while frozen. When that tick has been processed by both the
-	 * server and the client world, the callback runs once. Safe to call every rendered frame.
+	 * Runs exactly one more tick while frozen.
+	 *
+	 * @return true when the tick has been requested and is still in flight, false when the world is
+	 *         not frozen or the previous step is still pending
 	 */
-	public static void stepFrame(Runnable onCompleted) {
-		Minecraft client = Minecraft.getInstance();
-		IntegratedServer server = client.getSingleplayerServer();
-		if (server == null) {
-			return;
+	public static boolean requestStep() {
+		ServerTickRateManager manager = manager();
+		if (manager == null) {
+			return false;
 		}
-		ServerTickRateManager manager = server.tickRateManager();
 		if (!manager.isFrozen()) {
 			manager.setFrozen(true);
 		}
-		if (!stepRequested && !completedThisFrame) {
-			manager.stepGameIfPaused(1);
-			stepRequested = true;
-			return;
+		if (stepPending) {
+			return false;
 		}
-		TickRateManager clientManager = client.level == null ? null : client.level.tickRateManager();
-		boolean clientRan = clientManager != null && clientManager.runsNormally();
-		if (stepRequested && clientRan) {
-			stepRequested = false;
-			completedThisFrame = true;
-			if (onCompleted != null) {
-				onCompleted.run();
-			}
+		if (!manager.stepGameIfPaused(1)) {
+			return false;
 		}
+		stepPending = true;
+		stepStartedAt = System.nanoTime();
+		return true;
 	}
 
-	/** Freezes / unfreezes depending on whether a TAS screen is open. */
-	public static void applyScreenState(boolean screenOpen) {
-		Minecraft client = Minecraft.getInstance();
-		if (client.level == null || client.getSingleplayerServer() == null) {
-			return;
+	/** True once the requested tick has been consumed by the server. */
+	public static boolean consumeStepCompleted() {
+		if (!stepPending) {
+			return false;
 		}
-		if (TasSession.isPlaying()) {
-			return;
+		ServerTickRateManager manager = manager();
+		if (manager == null) {
+			stepPending = false;
+			return false;
 		}
-		boolean shouldFreeze = screenOpen && IncrementalConfig.freezeWhileManaging;
-		if (shouldFreeze) {
-			setFrozen(true);
-		} else {
-			unfreezeServer();
+		// The server clears frozenTicksToRun after running the tick; a safety timeout makes sure a
+		// lost step can never lock the UI.
+		boolean ran = manager.frozenTicksToRun() <= 0;
+		boolean timedOut = System.nanoTime() - stepStartedAt > 1_000_000_000L;
+		if (ran || timedOut) {
+			stepPending = false;
+			return true;
 		}
+		return false;
+	}
+
+	public static boolean stepPending() {
+		return stepPending;
 	}
 
 	public static void reset() {
-		stepRequested = false;
-		completedThisFrame = false;
+		stepPending = false;
 	}
 
-	/** Restores the live game after the world was frozen by us. */
+	/** Restores the live game after the world was frozen by the mod. */
 	public static void shutdown() {
-		Minecraft client = Minecraft.getInstance();
-		IntegratedServer server = client == null ? null : client.getSingleplayerServer();
-		if (server != null) {
-			server.tickRateManager().stopStepping();
-			server.tickRateManager().setFrozen(false);
+		ServerTickRateManager manager = manager();
+		if (manager != null) {
+			manager.stopStepping();
+			if (manager.isFrozen()) {
+				manager.setFrozen(false);
+			}
 		}
 		reset();
 	}

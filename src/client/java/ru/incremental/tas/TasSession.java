@@ -9,6 +9,9 @@ import net.minecraft.network.chat.Component;
 /**
  * Runtime state of the TAS: which recording is selected, whether we record or play back and at
  * which tick of the recording we currently are.
+ *
+ * <p>The selected {@link Recording} is the single source of truth. Recording writes into it,
+ * playback reads from it, and it only touches the disk when the user saves.</p>
  */
 public final class TasSession {
 	public enum State {
@@ -22,7 +25,8 @@ public final class TasSession {
 	private static State state = State.IDLE;
 	private static String selectedName;
 	private static int playhead;
-	private static String lastHudMessage;
+	/** Frame index the current take writes to; frames before it are kept untouched. */
+	private static int recordCursor;
 
 	private TasSession() {
 	}
@@ -41,12 +45,17 @@ public final class TasSession {
 		return state == State.RECORDING || state == State.RECORDING_PAUSED;
 	}
 
+	/** Recording that actually captures frames right now (not paused). */
 	public static boolean isRecordingActive() {
 		return state == State.RECORDING;
 	}
 
 	public static boolean isPlaying() {
 		return state == State.PLAYING || state == State.PLAY_PAUSED;
+	}
+
+	public static boolean isPlayingActive() {
+		return state == State.PLAYING;
 	}
 
 	public static boolean isBusy() {
@@ -58,8 +67,10 @@ public final class TasSession {
 	}
 
 	public static void setPlayhead(int tick) {
-		playhead = tick;
+		playhead = Math.max(0, tick);
 	}
+
+	// ---------------------------------------------------------------- selection
 
 	public static String selectedName() {
 		return selectedName;
@@ -74,72 +85,61 @@ public final class TasSession {
 		playhead = 0;
 	}
 
-	/** Recording that new frames are appended to. */
-	private static Recording active;
-
-	public static Recording active() {
-		return active;
+	/** Called after a rename so the selection follows the new name. */
+	public static void renamed(String oldName, String newName) {
+		if (oldName != null && oldName.equals(selectedName)) {
+			selectedName = newName;
+		}
 	}
 
-	static void beginRecording(Recording recording) {
-		active = recording;
-		selectedName = recording.name;
-		playhead = 0;
+	// ---------------------------------------------------------------- transitions
+
+	/** Starts a take at the given frame: everything up to it is kept, the rest is overwritten. */
+	static void beginRecording(int fromTick) {
+		recordCursor = Math.max(0, fromTick);
+		playhead = recordCursor;
 		state = State.RECORDING;
+	}
+
+	public static int recordCursor() {
+		return recordCursor;
+	}
+
+	static void advanceRecordCursor() {
+		recordCursor++;
+		playhead = recordCursor;
 	}
 
 	static void stopRecording() {
 		state = State.IDLE;
-		active = null;
 	}
 
-	static void beginPlayback(Recording recording) {
-		selectedName = recording.name;
-		playhead = 0;
+	static void beginPlayback(int fromTick) {
+		playhead = Math.max(0, fromTick);
 		state = State.PLAYING;
-		TasFreeze.reset();
 	}
 
 	static void stopPlayback() {
 		state = State.IDLE;
 		playhead = 0;
-		TasFreeze.unfreezeServer();
-		TasFreeze.reset();
 	}
 
-	/** Called when the game closes the level so nothing keeps ticking frozen. */
+	/** Called when the game leaves the world so nothing keeps running. */
 	public static void worldUnloaded() {
-		if (isPlaying()) {
-			TasFreeze.unfreezeServer();
-		}
+		TasFreeze.unfreeze();
 		TasFreeze.reset();
 		state = State.IDLE;
-		active = null;
 		playhead = 0;
 	}
 
 	// ---------------------------------------------------------------- helpers
-
-	/** A TAS screen is open and the config asks to freeze the world while managing. */
-	public static boolean screenFreezesWorld() {
-		Minecraft client = Minecraft.getInstance();
-		return client.screen instanceof ru.incremental.screen.TasScreen && IncrementalConfig.freezeWhileManaging;
-	}
 
 	public static boolean inSingleplayer() {
 		Minecraft client = Minecraft.getInstance();
 		return client.hasSingleplayerServer() && client.level != null && client.player != null;
 	}
 
-	public static void hudMessage(String text) {
-		lastHudMessage = text;
-	}
-
-	public static String lastHudMessage() {
-		return lastHudMessage;
-	}
-
-	/** Shows a message above the hotbar. */
+	/** Shows a message above the hotbar and in the TAS overlay. */
 	public static void flash(Component message) {
 		Minecraft client = Minecraft.getInstance();
 		if (client.gui != null) {

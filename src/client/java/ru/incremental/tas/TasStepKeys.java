@@ -1,22 +1,21 @@
 package ru.incremental.tas;
 
-import com.mojang.blaze3d.platform.InputConstants;
-
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
 import org.lwjgl.glfw.GLFW;
 
 /**
  * Polls the TAS hotkeys straight from GLFW.
  *
- * <p>They have to work while the world is frozen (menu open, playback paused), where no game tick
- * runs, so key mappings alone are not enough. One physical press produces exactly one action;
- * holding a key repeats after a short delay, which is convenient for rewinding.</p>
+ * <p>They are polled instead of being ordinary key bindings because the hotkeys must work while the
+ * world is frozen or a menu is open — exactly the situations where vanilla does not route key
+ * presses to key bindings. One physical press produces exactly one action; holding a key repeats
+ * after a short delay, which is convenient for walking through frames.</p>
  */
 public final class TasStepKeys {
 	private static final int REPEAT_DELAY_MS = 350;
-	private static final int REPEAT_RATE_MS = 70;
-	private static final int MOUSE_ATTACK = 0;
-	private static final int MOUSE_USE = 1;
+	private static final int REPEAT_RATE_MS = 80;
 
 	private static final long[] pressedAt = new long[TasKey.values().length];
 	private static final long[] repeatedAt = new long[TasKey.values().length];
@@ -26,24 +25,31 @@ public final class TasStepKeys {
 	private TasStepKeys() {
 	}
 
-	private static boolean isDown(Minecraft client, TasKey key) {
-		int code = IncrementalConfig.getKey(key);
-		if (code == GLFW.GLFW_KEY_UNKNOWN || client.getWindow() == null) {
+	private static boolean down(Minecraft client, int glfwCode) {
+		if (glfwCode == GLFW.GLFW_KEY_UNKNOWN || client.getWindow() == null) {
 			return false;
 		}
-		return InputConstants.isKeyDown(client.getWindow(), code);
+		if (glfwCode < 0) {
+			// Mouse bindings are stored as -100 - button.
+			return GLFW.glfwGetMouseButton(client.getWindow().handle(), -100 - glfwCode) == GLFW.GLFW_PRESS;
+		}
+		return GLFW.glfwGetKey(client.getWindow().handle(), glfwCode) == GLFW.GLFW_PRESS;
+	}
+
+	private static boolean down(Minecraft client, TasKey key) {
+		return down(client, IncrementalConfig.getKey(key));
 	}
 
 	/** One-shot press detection with optional auto-repeat (0 disables repeating). */
 	public static boolean pollPress(TasKey key, int repeatMs) {
 		Minecraft client = Minecraft.getInstance();
-		if (!isDown(client, key)) {
-			pressedAt[key.ordinal()] = 0L;
-			repeatedAt[key.ordinal()] = 0L;
+		int index = key.ordinal();
+		if (!down(client, key)) {
+			pressedAt[index] = 0L;
+			repeatedAt[index] = 0L;
 			return false;
 		}
 		long now = System.currentTimeMillis();
-		int index = key.ordinal();
 		if (pressedAt[index] == 0L) {
 			pressedAt[index] = now;
 			repeatedAt[index] = now;
@@ -57,56 +63,65 @@ public final class TasStepKeys {
 	}
 
 	public static boolean held(TasKey key) {
-		return isDown(Minecraft.getInstance(), key);
-	}
-
-	private static boolean mouseDown(Minecraft client, int button) {
-		return client.getWindow() != null && GLFW.glfwGetMouseButton(client.getWindow().handle(), button) == GLFW.GLFW_PRESS;
+		return down(Minecraft.getInstance(), key);
 	}
 
 	/**
-	 * Frame stepping and live input sampling. Runs once per client tick, and also once per rendered
-	 * frame while the world is frozen (nothing ticks then, so this is the only place that can react).
+	 * Reads the hotkeys and forwards them to the controller. Runs once per client tick and, while the
+	 * world is frozen, once per rendered frame as well: nothing ticks then, so this is the only place
+	 * that can react.
 	 */
 	public static void poll(Minecraft client) {
-		boolean menu = client.screen != null;
+		if (client.player == null || client.level == null) {
+			return;
+		}
+		if (textInputOpen(client)) {
+			// The player is typing a recording name — hotkeys must not steal the keys.
+			return;
+		}
 
-		if (pollPress(TasKey.NEXT_FRAME, REPEAT_RATE_MS)) {
-			TasStep.stepNextFrame();
+		if (pollPress(TasKey.START_RECORD, 0)) {
+			TasController.startRecording();
+		}
+		if (pollPress(TasKey.STOP_RECORD, 0)) {
+			TasController.stopRecording();
+		}
+		if (pollPress(TasKey.TOGGLE_PAUSE, 0)) {
+			TasController.togglePause();
+		}
+		if (pollPress(TasKey.SPEED_UP, 140)) {
+			TasController.speedUp();
+		}
+		if (pollPress(TasKey.SPEED_DOWN, 140)) {
+			TasController.speedDown();
+		}
+		if (pollPress(TasKey.REWIND, REPEAT_RATE_MS * 3)) {
+			TasController.jumpBack();
+		}
+		if (pollPress(TasKey.FORWARD, REPEAT_RATE_MS * 3)) {
+			TasController.jumpForward();
 		}
 		if (pollPress(TasKey.PREV_FRAME, REPEAT_RATE_MS)) {
-			TasStep.stepPrevFrame();
+			TasController.prevFrame();
+		}
+		if (pollPress(TasKey.NEXT_FRAME, REPEAT_RATE_MS)) {
+			TasController.nextFrame();
 		}
 		if (pollPress(TasKey.NEW_FRAME, 300)) {
 			TasController.insertFrame();
 		}
-		if (pollPress(TasKey.REWIND, REPEAT_RATE_MS * 4)) {
-			TasStep.stepBack(20);
+		if (pollPress(TasKey.SAVE, 0)) {
+			TasController.saveSelected();
 		}
-		if (pollPress(TasKey.FORWARD, REPEAT_RATE_MS * 4)) {
-			TasStep.stepForward(20);
+		if (pollPress(TasKey.PLAY, 0)) {
+			TasController.playOrStop();
 		}
-		if (pollPress(TasKey.SPEED_UP, 150)) {
-			TasController.speedUp();
-		}
-		if (pollPress(TasKey.SPEED_DOWN, 150)) {
-			TasController.speedDown();
-		}
-		if (!menu && TasSession.isPlaying() && pollPress(TasKey.TOGGLE_PAUSE, 0)) {
-			TasController.togglePause();
-		}
+	}
 
-		// Mouse buttons are sampled per tick; GLFW polling also works while the world is frozen.
-		if (client.player != null && !menu) {
-			boolean attack = mouseDown(client, MOUSE_ATTACK) && client.mouseHandler.isMouseGrabbed();
-			boolean use = mouseDown(client, MOUSE_USE) && client.mouseHandler.isMouseGrabbed();
-			boolean attackPressed = attack && !prevAttack;
-			boolean usePressed = use && !prevUse;
-			prevAttack = attack;
-			prevUse = use;
-			// Forward fresh clicks into vanilla when the TAS froze the world (vanilla skips them then).
-			TasController.feedMouseClicks(client, attackPressed, usePressed);
-		}
+	/** True when a screen with a focused text box is open (recording name, chat, sign, ...). */
+	public static boolean textInputOpen(Minecraft client) {
+		Screen screen = client.screen;
+		return screen != null && screen.getFocused() instanceof EditBox;
 	}
 
 	public static void reset() {

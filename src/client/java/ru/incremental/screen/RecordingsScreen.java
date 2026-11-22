@@ -19,13 +19,14 @@ import ru.incremental.tas.TasController;
 import ru.incremental.tas.TasSession;
 
 /**
- * "Выбор записи": the list of all recordings plus the record / play controls.
+ * "Recordings": the list of every recording plus the record / play / edit controls.
  *
- * <p>The very first entry is always the "Create recording" row which opens the name dialog.
- * Selecting a row only selects it; the actions live in the footer.</p>
+ * <p>The first row of the list is always the {@code + Create recording} entry, which opens the name
+ * dialog. Recordings can be created, selected, renamed, deleted and played from here.</p>
  */
 public class RecordingsScreen extends TasScreen {
 	private static final int ROW_H = 22;
+	private static final int LIST_ROWS = 8;
 
 	private int scroll;
 	private int listX;
@@ -40,14 +41,9 @@ public class RecordingsScreen extends TasScreen {
 	}
 
 	@Override
-	public boolean isPauseScreen() {
-		return true;
-	}
-
-	@Override
 	protected void buildWidgets() {
 		panelWidth = Math.min(width - 20, 470);
-		panelHeight = Math.min(height - 20, 286);
+		panelHeight = Math.min(height - 20, 320);
 		panelX = (width - panelWidth) / 2;
 		panelY = (height - panelHeight) / 2;
 		contentTop = panelY + 28;
@@ -55,79 +51,78 @@ public class RecordingsScreen extends TasScreen {
 		listX = panelX + 8;
 		listY = contentTop;
 		listWidth = panelWidth - 16;
-		listHeight = panelHeight - 28 - 78;
+		listHeight = LIST_ROWS * ROW_H;
 
-		int footerY = panelY + panelHeight - 24;
-		int row2Y = footerY - 24;
+		int y = listY + listHeight + 6;
+		int half = (listWidth - 4) / 2;
 
-		addRenderableWidget(doneButton(panelX + panelWidth - 78, footerY, 70));
-
-		addRenderableWidget(button(recordLabel(), panelX + 8, row2Y, 118, 20, b -> {
+		addRenderableWidget(button(recordLabel(), listX, y, half, 20, b -> {
 			if (TasSession.isRecording()) {
 				TasController.stopRecording();
 			} else {
 				TasController.startRecording();
 			}
-			Minecraft.getInstance().setScreen(new RecordingsScreen(parent));
-		}));
+			rebuildWidgets();
+		})).setTooltip(Tooltip.create(Component.translatable("key.incremental.start_record")));
 
-		addRenderableWidget(button(playLabel(), panelX + 8 + 122, row2Y, 118, 20, b -> {
+		addRenderableWidget(button(playLabel(), listX + half + 4, y, half, 20, b -> {
 			if (TasSession.isPlaying()) {
 				TasController.stopPlayback();
 			} else {
-				TasController.playOrStop();
+				TasController.startPlayback();
 			}
-			Minecraft.getInstance().setScreen(new RecordingsScreen(parent));
+			rebuildWidgets();
 		})).setTooltip(Tooltip.create(Component.translatable("key.incremental.play")));
 
-		addRenderableWidget(button(Component.translatable("incremental.button.edit"), panelX + 8 + 244, row2Y, 82, 20, b -> {
-			Recording selected = TasSession.selected();
-			if (selected == null) {
-				return;
+		y += 24;
+		int third = (listWidth - 8) / 3;
+		addRenderableWidget(button(Component.translatable("incremental.button.edit"), listX, y, third, 20, b -> {
+			if (TasSession.selected() != null && !TasSession.isPlaying()) {
+				TasController.startPlaybackPaused(0);
+				Minecraft.getInstance().setScreen(null);
 			}
-			if (!TasSession.isPlaying()) {
-				TasController.startPlaybackPaused(selected);
-			}
-			Minecraft.getInstance().setScreen(null);
-		})).setTooltip(Tooltip.create(Component.translatable("incremental.button.edit")));
+		})).setTooltip(Tooltip.create(Component.translatable("incremental.button.edit.tooltip")));
 
-		addRenderableWidget(button(Component.translatable("incremental.button.save"), panelX + 8 + 330, row2Y, 82, 20, b -> {
-			TasController.saveSelected();
-			Minecraft.getInstance().setScreen(new RecordingsScreen(parent));
-		}));
-
-		addRenderableWidget(button(Component.translatable("incremental.button.rename"), panelX + 8, footerY, 82, 20, b -> {
+		addRenderableWidget(button(Component.translatable("incremental.button.rename"), listX + third + 4, y, third, 20, b -> {
 			Recording selected = TasSession.selected();
 			if (selected != null) {
 				Minecraft.getInstance().setScreen(new NameDialogScreen(this, NameDialogScreen.Mode.RENAME, selected));
 			}
 		}));
 
-		addRenderableWidget(button(deleteLabel(), panelX + 8 + 86, footerY, 98, 20, b -> {
+		addRenderableWidget(button(deleteLabel(), listX + (third + 4) * 2, y, third, 20, b -> {
 			Recording selected = TasSession.selected();
 			if (selected == null) {
 				return;
 			}
 			long now = System.currentTimeMillis();
-			if (deleteCandidate != null && deleteCandidate.equals(selected.name) && now < deleteCandidateUntil) {
+			if (selected.name.equals(deleteCandidate) && now < deleteCandidateUntil) {
 				RecordingStorage.delete(selected);
 				TasSession.select(null);
 				deleteCandidate = null;
+				TasSession.flash("incremental.msg.deleted", Component.literal(selected.name));
 			} else {
 				deleteCandidate = selected.name;
 				deleteCandidateUntil = now + 2500L;
 			}
-			Minecraft.getInstance().setScreen(new RecordingsScreen(parent));
+			rebuildWidgets();
 		}));
+
+		addRenderableWidget(button(Component.translatable("incremental.button.save"), listX, y + 24, third, 20, b -> {
+			TasController.saveSelected();
+			rebuildWidgets();
+		}));
+
+		addRenderableWidget(doneButton(panelX + panelWidth - 78, panelY + panelHeight - 24, 70));
 	}
 
 	private static Component recordLabel() {
 		if (!TasSession.isRecording()) {
-			return Component.translatable("key.incremental.start_record");
+			return Component.translatable("incremental.button.record");
 		}
 		return TasSession.state() == TasSession.State.RECORDING_PAUSED
 				? Component.translatable("incremental.msg.rec_resume")
-				: Component.translatable("key.incremental.stop_record");
+				: Component.translatable("incremental.button.stop_record");
 	}
 
 	private static Component playLabel() {
@@ -139,8 +134,20 @@ public class RecordingsScreen extends TasScreen {
 				: Component.translatable("incremental.msg.play_stop");
 	}
 
-	private static Component deleteLabel() {
+	private Component deleteLabel() {
+		Recording selected = TasSession.selected();
+		if (selected != null && selected.name.equals(deleteCandidate) && System.currentTimeMillis() < deleteCandidateUntil) {
+			return Component.translatable("incremental.button.delete_confirm").withStyle(ChatFormatting.RED);
+		}
 		return Component.translatable("incremental.button.delete");
+	}
+
+	private int rowCount() {
+		return RecordingStorage.all().size() + 1;
+	}
+
+	private int maxScroll() {
+		return Math.max(0, rowCount() - LIST_ROWS);
 	}
 
 	@Override
@@ -149,16 +156,15 @@ public class RecordingsScreen extends TasScreen {
 
 		List<Recording> recordings = RecordingStorage.all();
 		int rows = recordings.size() + 1;
-		int visibleRows = visibleRows();
 
 		graphics.enableScissor(listX, listY, listX + listWidth, listY + listHeight);
-		for (int row = 0; row < visibleRows; row++) {
+		for (int row = 0; row < LIST_ROWS; row++) {
 			int index = row + scroll;
 			if (index >= rows) {
 				break;
 			}
 			int y = listY + row * ROW_H;
-			boolean hovered = mouseX >= listX && mouseX <= listX + listWidth && mouseY >= y && mouseY < y + ROW_H - 2;
+			boolean hovered = mouseX >= listX && mouseX < listX + listWidth && mouseY >= y && mouseY < y + ROW_H - 2;
 
 			if (index == 0) {
 				graphics.fill(listX, y, listX + listWidth, y + ROW_H - 2, hovered ? 0xFF1F3340 : 0xFF17242B);
@@ -175,66 +181,62 @@ public class RecordingsScreen extends TasScreen {
 			}
 
 			String name = recording.name;
-			int maxWidth = listWidth - 110;
+			int maxWidth = listWidth - 120;
 			while (font.width(name) > maxWidth && name.length() > 1) {
 				name = name.substring(0, name.length() - 1);
 			}
 			graphics.drawString(font, Component.literal(name), listX + 8, y + 7, selected ? 0xFFFFFFFF : TEXT, false);
 
 			String info = recording.size() + " t · " + recording.durationText();
-			int infoWidth = font.width(info);
-			graphics.drawString(font, Component.literal(info).withStyle(ChatFormatting.GRAY), listX + listWidth - 8 - infoWidth, y + 7, MUTED, false);
+			graphics.drawString(font, Component.literal(info).withStyle(ChatFormatting.GRAY),
+					listX + listWidth - 8 - font.width(info), y + 7, MUTED, false);
 		}
 		graphics.disableScissor();
 
-		if (rows <= 1) {
+		if (rows == 1) {
 			drawCenteredText(graphics, Component.translatable("incremental.recordings.empty"), listY + listHeight / 2, MUTED);
 		}
 
-		if (rows > visibleRows) {
+		if (maxScroll() > 0) {
 			int barX = listX + listWidth - 3;
 			graphics.fill(barX, listY, barX + 2, listY + listHeight, 0xFF20242C);
-			float ratio = (float) visibleRows / rows;
+			float ratio = (float) LIST_ROWS / rows;
 			int thumb = Math.max(12, (int) (listHeight * ratio));
-			int maxScroll = rows - visibleRows;
-			int offset = maxScroll == 0 ? 0 : (int) ((listHeight - thumb) * ((float) scroll / maxScroll));
+			int offset = (int) ((listHeight - thumb) * ((float) scroll / maxScroll()));
 			graphics.fill(barX, listY + offset, barX + 2, listY + offset + thumb, ACCENT_SOFT);
 		}
 
 		Recording selected = TasSession.selected();
 		Component status = selected == null
 				? Component.translatable("incremental.recordings.select")
-				: Component.literal(selected.name + "  ·  " + selected.size() + " t  ·  " + selected.durationText());
-		graphics.drawString(font, status, panelX + 8 + 92, panelY + panelHeight - 41, selected == null ? MUTED : TEXT, false);
+				: Component.literal(selected.name + "   " + selected.size() + " t   " + selected.durationText()
+						+ (selected.savedAt == 0L ? "   " + Component.translatable("incremental.recordings.unsaved").getString() : ""));
+		graphics.drawString(font, status, listX, listY + listHeight + 78, selected == null ? MUTED : TEXT, false);
 
 		if (deleteCandidate != null && System.currentTimeMillis() < deleteCandidateUntil) {
-			drawCenteredText(graphics, Component.translatable("incremental.recordings.confirm_delete"), listY - 11, DANGER);
+			drawCenteredText(graphics, Component.translatable("incremental.recordings.confirm_delete"), listY + listHeight + 96, DANGER);
 		}
-	}
-
-	private int visibleRows() {
-		return Math.max(1, listHeight / ROW_H);
 	}
 
 	@Override
 	public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-		if (event.button() == 0) {
+		if (event.button() == 0 && event.x() >= listX && event.x() <= listX + listWidth
+				&& event.y() >= listY && event.y() < listY + listHeight) {
 			List<Recording> recordings = RecordingStorage.all();
 			int rows = recordings.size() + 1;
-			int visibleRows = visibleRows();
-			for (int row = 0; row < visibleRows; row++) {
+			for (int row = 0; row < LIST_ROWS; row++) {
 				int index = row + scroll;
 				if (index >= rows) {
 					break;
 				}
 				int y = listY + row * ROW_H;
-				if (event.x() >= listX && event.x() <= listX + listWidth && event.y() >= y && event.y() < y + ROW_H - 2) {
+				if (event.y() >= y && event.y() < y + ROW_H - 2) {
 					Minecraft client = Minecraft.getInstance();
 					if (index == 0) {
 						client.setScreen(new NameDialogScreen(this, NameDialogScreen.Mode.CREATE, null));
 					} else {
 						TasSession.select(recordings.get(index - 1));
-						client.setScreen(new RecordingsScreen(parent));
+						rebuildWidgets();
 					}
 					return true;
 				}
@@ -246,35 +248,23 @@ public class RecordingsScreen extends TasScreen {
 	@Override
 	public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical) {
 		if (mouseX >= listX && mouseX <= listX + listWidth && mouseY >= listY && mouseY <= listY + listHeight) {
-			int maxScroll = Math.max(0, RecordingStorage.all().size() + 1 - visibleRows());
-			scroll = Mth.clamp(scroll - (int) Math.signum(vertical), 0, maxScroll);
-			return true;
+			if (maxScroll() > 0) {
+				scroll = Mth.clamp(scroll - (int) Math.signum(vertical), 0, maxScroll());
+				return true;
+			}
 		}
 		return super.mouseScrolled(mouseX, mouseY, horizontal, vertical);
 	}
 
 	@Override
 	public boolean keyPressed(KeyEvent event) {
+		// Enter on a selected recording starts / stops playback and goes straight back to the game.
 		if (event.key() == 257 && TasSession.selected() != null) {
 			if (TasSession.isPlaying()) {
 				TasController.stopPlayback();
 			} else {
-				TasController.startPlayback(TasSession.selected());
+				TasController.startPlayback();
 				Minecraft.getInstance().setScreen(null);
-			}
-			return true;
-		}
-		if (event.key() == 261 && TasSession.selected() != null) {
-			long now = System.currentTimeMillis();
-			Recording selected = TasSession.selected();
-			if (deleteCandidate != null && deleteCandidate.equals(selected.name) && now < deleteCandidateUntil) {
-				RecordingStorage.delete(selected);
-				TasSession.select(null);
-				deleteCandidate = null;
-				Minecraft.getInstance().setScreen(new RecordingsScreen(parent));
-			} else {
-				deleteCandidate = selected.name;
-				deleteCandidateUntil = now + 2500L;
 			}
 			return true;
 		}
@@ -286,6 +276,7 @@ public class RecordingsScreen extends TasScreen {
 		super.tick();
 		if (deleteCandidate != null && System.currentTimeMillis() >= deleteCandidateUntil) {
 			deleteCandidate = null;
+			rebuildWidgets();
 		}
 	}
 }

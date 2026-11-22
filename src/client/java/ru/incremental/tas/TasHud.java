@@ -41,27 +41,12 @@ public final class TasHud {
 		if (client.player == null || client.options.hideGui) {
 			return;
 		}
-		RecordedFrame frame = null;
-		String text = null;
-		if (TasSession.isRecording() || TasSession.isPlaying()) {
-			RecordedFrame current = null;
-			Recording recording = TasSession.isPlaying() ? TasSession.selected() : TasSession.active();
-			int tick = TasSession.playhead();
-			if (recording != null && recording.size() > 0) {
-				int index = Math.max(0, Math.min(recording.size() - 1, tick - 1));
-				current = recording.get(index);
-			}
-			frame = current;
-		} else if (messageTicks > 0) {
-			frame = null;
-		}
-
 		if (!IncrementalConfig.showOverlay && messageTicks <= 0) {
 			return;
 		}
 
-		int centerX = Minecraft.getInstance().getWindow().getGuiScaledWidth() / 2;
-		int y = Minecraft.getInstance().getWindow().getGuiScaledHeight() - 72;
+		int centerX = client.getWindow().getGuiScaledWidth() / 2;
+		int y = client.getWindow().getGuiScaledHeight() - 72;
 
 		if (IncrementalConfig.showOverlay) {
 			Component label = statusLabel();
@@ -69,9 +54,10 @@ public final class TasHud {
 				graphics.drawCenteredString(client.font, label, centerX, y, 0xFFFFFFFF);
 				y += 10;
 			}
-			String info = frameInfo(frame);
-			if (info != null) {
-				graphics.drawCenteredString(client.font, Component.literal(info).withStyle(ChatFormatting.GRAY), centerX, y, 0xFFAAAAAA);
+			RecordedFrame frame = currentFrame();
+			if (frame != null) {
+				graphics.drawCenteredString(client.font,
+						Component.literal(frame.describe()).withStyle(ChatFormatting.GRAY), centerX, y, 0xFFAAAAAA);
 			}
 		}
 
@@ -80,34 +66,24 @@ public final class TasHud {
 		}
 	}
 
-	private static Component statusLabel() {
-		Recording recording = TasSession.isPlaying() ? TasSession.selected() : TasSession.active();
-		return switch (TasSession.state()) {
-			case RECORDING -> Component.translatable("incremental.overlay.recording", recording == null ? 0 : recording.size());
-			case RECORDING_PAUSED -> Component.translatable("incremental.overlay.paused", recording == null ? 0 : recording.size());
-			case PLAYING -> Component.translatable("incremental.overlay.playing", TasSession.playhead(), recording == null ? 0 : recording.size());
-			case PLAY_PAUSED -> Component.translatable("incremental.overlay.play_paused", TasSession.playhead(), recording == null ? 0 : recording.size());
-			case IDLE -> null;
-		};
-	}
-
-	private static String frameInfo(RecordedFrame frame) {
-		if (frame == null) {
+	private static RecordedFrame currentFrame() {
+		Recording recording = TasSession.selected();
+		if (recording == null || recording.size() == 0) {
 			return null;
 		}
-		StringBuilder keys = new StringBuilder();
-		if (frame.forward) keys.append("W");
-		if (frame.backward) keys.append("S");
-		if (frame.left) keys.append("A");
-		if (frame.right) keys.append("D");
-		if (frame.jump) keys.append("J");
-		if (frame.shift) keys.append("⇧");
-		if (frame.sprint) keys.append("⤢");
-		if (frame.attack) keys.append("LMB");
-		if (frame.use) keys.append("RMB");
-		if (keys.isEmpty()) {
-			keys.append("—");
-		}
-		return "[" + keys + "]  slot " + (frame.hotbar + 1) + "  " + String.format("yaw %.1f", frame.yaw);
+		int index = Math.max(0, Math.min(recording.size() - 1, TasSession.playhead() - 1));
+		return recording.get(index);
+	}
+
+	private static Component statusLabel() {
+		Recording recording = TasSession.selected();
+		int size = recording == null ? 0 : recording.size();
+		return switch (TasSession.state()) {
+			case RECORDING -> Component.translatable("incremental.overlay.recording", size);
+			case RECORDING_PAUSED -> Component.translatable("incremental.overlay.paused", size);
+			case PLAYING -> Component.translatable("incremental.overlay.playing", TasSession.playhead(), size);
+			case PLAY_PAUSED -> Component.translatable("incremental.overlay.play_paused", TasSession.playhead(), size);
+			case IDLE -> null;
+		};
 	}
 }
