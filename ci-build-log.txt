@@ -43,22 +43,11 @@ Cannot remap modifiers because it does not exist in any of the targets [] or the
 > Task :jar
 > Task :remapJar FAILED
 
-1 problem was found storing the configuration cache.
-- Task `:remapJar` of type `net.fabricmc.loom.task.RemapJarTask`: invocation of 'project' references a Gradle script object from a Groovy closure at execution time, which is unsupported with the configuration cache.
-  See https://docs.gradle.org/9.8.2/userguide/configuration_cache_requirements.html#config_cache:requirements:gradle_model_types
-
-See the complete report at file:///home/runner/work/incremental/incremental/build/reports/configuration-cache/998i2knv5stagbcn5b815li6v/3nosw0w1vfopl049bz31h07z/configuration-cache-report.html
-
-[Incubating] Problems report is available at: file:///home/runner/work/incremental/incremental/build/reports/problems/problems-report.html
-
 FAILURE: Build failed with an exception.
-
-* Where:
-Build file '/home/runner/work/incremental/incremental/build.gradle' line: 68
 
 * What went wrong:
 Execution failed for task ':remapJar' (registered by plugin 'fabric-loom').
-> Invocation of 'project' references a Gradle script object from a Groovy closure at execution time, which is unsupported with the configuration cache.
+> Entry LICENSE_incremental is a duplicate but no duplicate handling strategy has been set. Please refer to https://docs.gradle.org/9.8.2/dsl/org.gradle.api.tasks.Copy.html#org.gradle.api.tasks.Copy:duplicatesStrategy for details.
 
 * Try:
 > Run with --info or --debug option to get more log output.
@@ -95,22 +84,10 @@ org.gradle.api.tasks.TaskExecutionException: Execution failed for task ':remapJa
 	at org.gradle.execution.plan.DefaultPlanExecutor$ExecutorWorker.run(DefaultPlanExecutor.java:392)
 	at org.gradle.internal.concurrent.ExecutorPolicy$CatchAndRecordFailures.onExecute(ExecutorPolicy.java:65)
 	at org.gradle.internal.concurrent.AbstractManagedExecutor$1.run(AbstractManagedExecutor.java:47)
-Caused by: org.gradle.api.InvalidUserCodeException: Invocation of 'project' references a Gradle script object from a Groovy closure at execution time, which is unsupported with the configuration cache.
-	at org.gradle.internal.configuration.problems.DefaultProblemFactory$problem$1$build$diagnostics$1.get(DefaultProblemFactory.kt:89)
-	at org.gradle.internal.configuration.problems.DefaultProblemFactory$problem$1$build$diagnostics$1.get(DefaultProblemFactory.kt:89)
-	at org.gradle.internal.problems.StackTraceCapturer.captureSupplied(StackTraceCapturer.java:53)
-	at org.gradle.internal.problems.DefaultProblemDiagnosticsFactory$DefaultProblemStream.getImplicitThrowable(DefaultProblemDiagnosticsFactory.java:170)
-	at org.gradle.internal.problems.DefaultProblemDiagnosticsFactory$DefaultProblemStream.forCurrentCaller(DefaultProblemDiagnosticsFactory.java:155)
-	at org.gradle.internal.configuration.problems.DefaultProblemFactory$problem$1.build(DefaultProblemFactory.kt:89)
-	at org.gradle.internal.serialize.codecs.core.ClosureCodec$BrokenScript.scriptReferenced(GroovyCodecs.kt:175)
-	at org.gradle.internal.serialize.codecs.core.ClosureCodec$BrokenScript.getProperty(GroovyCodecs.kt:143)
-	at build_8rexcizc4xqk44ujfjblr6fqh$_run_closure9$_closure16$_closure17.doCall$original(/home/runner/work/incremental/incremental/build.gradle:68)
-	at build_8rexcizc4xqk44ujfjblr6fqh$_run_closure9$_closure16$_closure17.doCall(/home/runner/work/incremental/incremental/build.gradle)
-	at org.gradle.api.internal.file.copy.ClosureBackedTransformer.transform(ClosureBackedTransformer.java:30)
-	at org.gradle.api.internal.file.copy.ClosureBackedTransformer.transform(ClosureBackedTransformer.java:21)
-	at org.gradle.api.internal.file.copy.RenamingCopyAction.execute(RenamingCopyAction.java:33)
-	at org.gradle.api.internal.file.copy.RenamingCopyAction.execute(RenamingCopyAction.java:23)
-	at org.gradle.api.internal.file.copy.CopyFileVisitorImpl.processFile(CopyFileVisitorImpl.java:63)
+Caused by: org.gradle.api.InvalidUserCodeException: Entry LICENSE_incremental is a duplicate but no duplicate handling strategy has been set. Please refer to https://docs.gradle.org/9.8.2/dsl/org.gradle.api.tasks.Copy.html#org.gradle.api.tasks.Copy:duplicatesStrategy for details.
+	at org.gradle.api.internal.file.copy.DuplicateHandlingCopyActionDecorator.failWithIncorrectDuplicatesStrategySetup(DuplicateHandlingCopyActionDecorator.java:81)
+	at org.gradle.api.internal.file.copy.DuplicateHandlingCopyActionDecorator.lambda$execute$1(DuplicateHandlingCopyActionDecorator.java:56)
+	at org.gradle.api.internal.file.copy.CopyFileVisitorImpl.processFile(CopyFileVisitorImpl.java:68)
 	at org.gradle.api.internal.file.copy.CopyFileVisitorImpl.visitFile(CopyFileVisitorImpl.java:52)
 	at org.gradle.api.internal.file.collections.DirectoryFileTree.processSingleFile(DirectoryFileTree.java:139)
 	at org.gradle.api.internal.file.collections.DirectoryFileTree.visitFrom(DirectoryFileTree.java:126)
@@ -237,6 +214,6 @@ Caused by: org.gradle.api.InvalidUserCodeException: Invocation of 'project' refe
 	... 25 more
 
 
-BUILD FAILED in 51s
+BUILD FAILED in 1m 8s
 8 actionable tasks: 8 executed
-Configuration cache entry discarded with 1 problem.
+Configuration cache entry stored.
