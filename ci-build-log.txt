@@ -27,9 +27,9 @@ Cannot remap modifiers because it does not exist in any of the targets [] or the
 
 > Task :compileJava NO-SOURCE
 > Task :processIncludeJars
+> Task :processClientResources
 > Task :processTestResources NO-SOURCE
 > Task :validateAccessWidener NO-SOURCE
-> Task :processClientResources
 > Task :sourcesJar
 > Task :processResources
 > Task :classes
@@ -45,6 +45,6 @@ Cannot remap modifiers because it does not exist in any of the targets [] or the
 > Task :assemble
 > Task :build
 
-BUILD SUCCESSFUL in 48s
+BUILD SUCCESSFUL in 1m
 8 actionable tasks: 8 executed
 Configuration cache entry stored.
