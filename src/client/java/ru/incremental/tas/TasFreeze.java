@@ -95,10 +95,11 @@ public final class TasFreeze {
 			stepPending = false;
 			return false;
 		}
-		// The server clears frozenTicksToRun after running the tick; a safety timeout makes sure a
-		// lost step can never lock the UI.
+		// The server clears frozenTicksToRun once it has run the tick. The timeout is a generous
+		// fallback for a server that never gets around to it (paused, still loading, ...), so a lost
+		// step can never block the UI forever.
 		boolean ran = manager.frozenTicksToRun() <= 0;
-		boolean timedOut = System.nanoTime() - stepStartedAt > 1_000_000_000L;
+		boolean timedOut = System.nanoTime() - stepStartedAt > 3_000_000_000L;
 		if (ran || timedOut) {
 			stepPending = false;
 			return true;

@@ -27,6 +27,11 @@ public abstract class MinecraftMixin {
 		}
 	}
 
+	@Inject(method = "tick", at = @At("TAIL"))
+	private void incremental$tickEnd(CallbackInfo ci) {
+		TasController.onClientTickEnd();
+	}
+
 	@Inject(method = "setScreen", at = @At("TAIL"))
 	private void incremental$screenChanged(Screen screen, CallbackInfo ci) {
 		TasController.onScreenChanged((Minecraft) (Object) this, screen);

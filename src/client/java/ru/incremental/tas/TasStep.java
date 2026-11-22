@@ -14,6 +14,7 @@ import net.minecraft.network.chat.Component;
  */
 public final class TasStep {
 	private static RecordedFrame armedFrame;
+	private static boolean armedFramePending;
 	private static boolean awaitingTick;
 
 	private TasStep() {
@@ -31,6 +32,7 @@ public final class TasStep {
 	/** Discards a step in flight, e.g. when playback is paused or stopped by the user. */
 	public static void clearPlaybackFrame() {
 		armedFrame = null;
+		armedFramePending = false;
 		awaitingTick = false;
 		Minecraft client = Minecraft.getInstance();
 		if (client.player != null && client.player.input instanceof TasPlaybackInput) {
@@ -38,8 +40,23 @@ public final class TasStep {
 		}
 	}
 
+	/**
+	 * Runs after the client tick. Requesting the server step only now guarantees that the input
+	 * packet of the armed frame has already been handed to the server, so the single tick that is
+	 * allowed to run actually sees the recorded input.
+	 */
+	public static void requestQueuedStep() {
+		if (!armedFramePending) {
+			return;
+		}
+		armedFramePending = false;
+		awaitingTick = true;
+		TasFreeze.requestStep();
+	}
+
 	public static void reset() {
 		armedFrame = null;
+		armedFramePending = false;
 		awaitingTick = false;
 	}
 
@@ -48,7 +65,9 @@ public final class TasStep {
 		if (!awaitingTick) {
 			return;
 		}
-		if (TasFreeze.stepPending()) {
+		// consumeStepCompleted() also releases the pending flag, so a step can never get stuck and
+		// block every later step.
+		if (!TasFreeze.consumeStepCompleted()) {
 			return;
 		}
 		awaitingTick = false;
@@ -94,7 +113,7 @@ public final class TasStep {
 			TasSession.flash("incremental.msg.frame_empty");
 			return;
 		}
-		if (awaitingTick) {
+		if (awaitingTick || armedFramePending) {
 			return;
 		}
 		if (!TasFreeze.isAvailable()) {
@@ -103,8 +122,7 @@ public final class TasStep {
 		}
 		TasFreeze.setFrozen(true);
 		armedFrame = recording.get(tick);
-		awaitingTick = true;
-		TasFreeze.requestStep();
+		armedFramePending = true;
 	}
 
 	/** F ("previous frame") and R (rewind). */

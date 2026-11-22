@@ -325,6 +325,7 @@ public final class TasController {
 		if (client.player == null) {
 			return;
 		}
+		// A step that was requested last tick has run by now; advance the playhead.
 		TasStep.tick();
 		if (TasSession.isPlayingActive()) {
 			playNextFrame(client);
@@ -333,12 +334,22 @@ public final class TasController {
 		if (!TasSession.isPlaying()) {
 			return;
 		}
-		// Playback paused: run a single armed frame, if the user asked for one.
+		// Playback paused: write the armed frame into the game, so this tick consumes it and the
+		// server receives the matching input packet.
 		RecordedFrame armed = TasStep.armedFrame();
 		if (armed != null) {
 			applyFrame(client, armed, true);
 			TasStep.clearArmedFrame();
 		}
+	}
+
+	/** Called at the tail of {@code Minecraft.tick}. */
+	public static void onClientTickEnd() {
+		if (Minecraft.getInstance().player == null) {
+			return;
+		}
+		// Now the input packet of the armed frame has reached the server: let it run one tick.
+		TasStep.requestQueuedStep();
 	}
 
 	/**
