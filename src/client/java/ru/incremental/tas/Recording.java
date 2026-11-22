@@ -12,6 +12,11 @@ public final class Recording {
 	/** Epoch millis when the recording was last saved. */
 	public long savedAt;
 	public final List<RecordedFrame> frames = new ArrayList<>();
+	/**
+	 * Blocks this take changed, packed position to {@code "state|dimension"}. Restored before the
+	 * replay and cleaned up after it, so the run always starts from the state it was recorded on.
+	 */
+	public final java.util.Map<String, String> blocks = new java.util.LinkedHashMap<>();
 
 	public Recording(String name) {
 		this.name = name;

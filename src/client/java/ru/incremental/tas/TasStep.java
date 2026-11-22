@@ -250,7 +250,8 @@ public final class TasStep {
 		if (client.player == null || frame == null) {
 			return;
 		}
-		TasTeleport.apply(client, frame);
+		// A cursor jump is not a continuous movement: snap to the recorded spot.
+		TasTeleport.apply(client, frame, true);
 		TasController.applyCamera(client.player, frame);
 		if (frame.hotbar >= 0 && frame.hotbar < 9) {
 			client.player.getInventory().setSelectedSlot(frame.hotbar);

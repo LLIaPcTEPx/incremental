@@ -11,29 +11,48 @@ import net.minecraft.world.entity.Relative;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Moves the player around during playback.
+ * Keeps the player on the recorded path during playback.
  *
- * <p>A recording stores absolute coordinates, so replaying one means putting the player exactly
- * where the take was captured, including the dimension. That cannot be done client side: the server
- * keeps its own copy of the player and snaps the client back whenever the jump does not look like a
- * legal movement. The supported route is {@code ServerGamePacketListenerImpl.teleport()}, which snaps
- * the server player, sets the awaiting-teleport state and sends the matching
- * {@code ClientboundPlayerPositionPacket}; the client accepts it and both sides stay in sync.</p>
+ * <p>A recording stores absolute coordinates, but replaying them does not mean teleporting every
+ * tick. The input is replayed exactly, the physics is deterministic, and the world is restored to the
+ * state the run was recorded on (see {@link TasBlocks}) — so in the normal case the player simply
+ * walks the recorded path and nothing needs to be corrected. That is what makes a replay look
+ * smooth: the movement is produced by the game, not by a series of jumps.</p>
+ *
+ * <p>A teleport is a <em>correction</em>, used when the player drifts away from the recording (a
+ * different world state, an entity that is not there anymore, a paused server, a frame jump). It goes
+ * through {@code ServerGamePacketListenerImpl.teleport()}, the only route that keeps the server's
+ * authoritative position in sync.</p>
  */
 public final class TasTeleport {
+	/** How far the player may drift from the recording before it is snapped back, in blocks. */
+	private static final double TOLERANCE = 0.75D;
+	/** Vertical tolerance is smaller: a wrong Y is always a real desync. */
+	private static final double VERTICAL_TOLERANCE = 0.35D;
+
 	private TasTeleport() {
 	}
 
-	/** Last target, so the same position is not teleported to twice within one tick. */
 	private static String lastTarget;
 	private static int lastTargetTick = -1;
 
 	/**
-	 * Teleports the player to the frame position. Called from the client tick, before the level
-	 * ticks, so the server handles the teleport in the same tick the frame belongs to.
+	 * Playback entry point: corrects the position only when the player is obviously off the recorded
+	 * path.
 	 */
 	public static void apply(Minecraft client, RecordedFrame frame) {
+		apply(client, frame, false);
+	}
+
+	/**
+	 * @param force snap to the frame position even when the player is close, used when playback starts
+	 *              or jumps to another frame
+	 */
+	public static void apply(Minecraft client, RecordedFrame frame, boolean force) {
 		if (frame == null || !frame.hasPosition || client.player == null) {
+			return;
+		}
+		if (!force && !needsCorrection(client, frame)) {
 			return;
 		}
 		MinecraftServer server = client.getSingleplayerServer();
@@ -69,6 +88,25 @@ public final class TasTeleport {
 				player.connection.teleport(destination, Set.<Relative>of());
 			}
 		});
+	}
+
+	/** True when the local player is far enough from the recorded position to justify a snap. */
+	private static boolean needsCorrection(Minecraft client, RecordedFrame frame) {
+		var player = client.player;
+		if (player == null) {
+			return false;
+		}
+		String dimension = player.level().dimension().identifier().toString();
+		if (frame.dimension != null && !frame.dimension.equals(dimension)) {
+			return true;
+		}
+		double dx = player.getX() - frame.x;
+		double dy = player.getY() - frame.y;
+		double dz = player.getZ() - frame.z;
+		if (Math.abs(dy) > VERTICAL_TOLERANCE) {
+			return true;
+		}
+		return dx * dx + dz * dz > TOLERANCE * TOLERANCE;
 	}
 
 	private static ServerLevel findLevel(MinecraftServer server, String dimension) {

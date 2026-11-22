@@ -9,7 +9,9 @@
 		"LocalPlayerMixin",
 		"MouseHandlerMixin",
 		"GameRendererMixin",
-		"KeyMappingAccessor"
+		"KeyMappingAccessor",
+		"SectionBlocksUpdateMixin",
+		"BlockUpdateMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

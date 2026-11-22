@@ -58,6 +58,10 @@ public final class TasController {
 		// until the new take grows long enough to reach them.
 		TasPlaybackInput.uninstall(Minecraft.getInstance());
 		TasStep.beginRecording(Math.min(TasSession.playhead(), recording.size()));
+		// Capture the blocks this take changes. The states loaded from disk are the ones the take
+		// already knows about; new changes are appended as the run goes.
+		TasBlocks.load(recording.blocks);
+		TasBlocks.setCapturing(true);
 		TasFreeze.setFrozen(false);
 		if (client().mouseHandler != null && client().screen == null && !client().mouseHandler.isMouseGrabbed()) {
 			client().mouseHandler.grabMouse();
@@ -85,15 +89,26 @@ public final class TasController {
 		Recording recording = TasSession.selected();
 		int ticks = recording == null ? 0 : recording.size();
 		TasSession.stopRecording();
+		TasBlocks.setCapturing(false);
 		TasStep.resetRewind();
 		if (wasRewound) {
 			// The rewind-paused take froze the world; stopping it must give the game back.
 			TasFreeze.unfreeze();
 		}
+		int blocks = 0;
 		if (recording != null) {
+			// Store the captured block states with the take so a replay can restore them.
+			recording.blocks.clear();
+			recording.blocks.putAll(TasBlocks.snapshot());
+			blocks = recording.blocks.size();
 			RecordingStorage.save(recording);
 		}
-		TasSession.flash("incremental.msg.rec_stop", ticks);
+		TasBlocks.clear();
+		if (blocks > 0) {
+			TasSession.flash("incremental.msg.rec_stop_blocks", ticks, blocks);
+		} else {
+			TasSession.flash("incremental.msg.rec_stop", ticks);
+		}
 	}
 
 	public static void toggleRecordingPause() {
@@ -147,6 +162,10 @@ public final class TasController {
 		}
 		int tick = Mth.clamp(fromTick, 0, recording.size() - 1);
 		TasSession.select(recording);
+		// The replay has to start from the blocks the take was recorded on: remove what the take
+		// placed and restore what it broke. The run itself then re-creates those changes tick by
+		// tick, which is the familiar "world is cleaned, then the run plays it back" flow.
+		boolean restored = restoreBlocksFor(recording);
 		TasSession.beginPlayback(tick);
 		TasPlaybackInput.install(Minecraft.getInstance());
 		if (Minecraft.getInstance().screen instanceof ru.incremental.screen.TasScreen) {
@@ -160,7 +179,28 @@ public final class TasController {
 		}
 		RecordedFrame first = recording.get(tick);
 		String where = first.hasPosition ? "  @  " + first.positionText() : "";
-		TasSession.flash("incremental.msg.play_start", Component.literal(recording.name + where));
+		if (restored) {
+			// Say how many blocks were reset: the cleanup is visible in the world, this explains it.
+			TasSession.flash("incremental.msg.play_start_blocks",
+					Component.literal(recording.name + where), recording.blocks.size());
+		} else {
+			TasSession.flash("incremental.msg.play_start", Component.literal(recording.name + where));
+		}
+	}
+
+	/**
+	 * Loads this recording's block list and writes the original states back into the world.
+	 *
+	 * @return true when the replay actually changed something, so the caller can tell the user
+	 */
+	private static boolean restoreBlocksFor(Recording recording) {
+		if (recording.blocks.isEmpty()) {
+			TasBlocks.clear();
+			return false;
+		}
+		TasBlocks.load(recording.blocks);
+		int changed = TasBlocks.restoreOriginals();
+		return changed > 0;
 	}
 
 	/** Starts playback already paused so the recording can be inspected frame by frame. */
@@ -203,7 +243,13 @@ public final class TasController {
 		TasFreeze.unfreeze();
 		restoreTickRate();
 		clientTickTargetMillis = 0.0F;
-		TasSession.flash("incremental.msg.play_stop");
+		// The take is over: take its blocks back out of the world, so nothing it built is left behind.
+		int cleaned = TasBlocks.cleanup();
+		if (cleaned > 0) {
+			TasSession.flash("incremental.msg.play_stop_blocks", cleaned);
+		} else {
+			TasSession.flash("incremental.msg.play_stop");
+		}
 	}
 
 	/** The single "pause" action: pauses whichever activity is running. */
@@ -425,6 +471,11 @@ public final class TasController {
 			finishPlayback(recording);
 			return;
 		}
+		if (tick == 0) {
+			// First frame of the take: put the player exactly where the run started, otherwise the
+			// first tick would be replayed from wherever the user happened to stand.
+			TasTeleport.apply(client, recording.get(tick), true);
+		}
 		applyFrame(client, recording.get(tick), true);
 		TasSession.setPlayhead(tick + 1);
 	}
@@ -507,10 +558,17 @@ public final class TasController {
 		if (player.getYRot() == yaw && player.getXRot() == pitch) {
 			return;
 		}
+		// yRotO/xRotO hold the angle of the *previous* tick: the renderer lerps between them and the
+		// current rotation with the frame's partial tick, which is what makes a turn look continuous.
+		// Setting them to the new angle (as an earlier version did) removed that interpolation and
+		// made the camera snap once per tick — the "choppy playback" the replay used to have.
+		player.yRotO = player.getYRot();
+		player.xRotO = player.getXRot();
 		player.setYRot(yaw);
 		player.setXRot(pitch);
-		player.yRotO = yaw;
-		player.xRotO = pitch;
+		// The body follows the head, otherwise the shoulders lag behind a fast recorded turn.
+		player.setYHeadRot(yaw);
+		player.setYBodyRot(yaw);
 	}
 
 	// ------------------------------------------------------------ screens & frames

@@ -185,6 +185,12 @@ public final class RecordingStorage {
 			frames.add(json);
 		}
 		root.add("frames", frames);
+		// Blocks the take changed: a replay restores these before it starts and after it ends.
+		if (!recording.blocks.isEmpty()) {
+			JsonObject blocks = new JsonObject();
+			recording.blocks.forEach(blocks::addProperty);
+			root.add("blocks", blocks);
+		}
 		try {
 			Files.createDirectories(folder());
 			try (Writer writer = Files.newBufferedWriter(pathFor(recording.name))) {
@@ -208,6 +214,13 @@ public final class RecordingStorage {
 			String name = root.has("name") ? root.get("name").getAsString() : stripExtension(file);
 			Recording recording = new Recording(Recording.sanitize(name));
 			recording.savedAt = root.has("savedAt") ? root.get("savedAt").getAsLong() : 0L;
+			if (root.has("blocks") && root.get("blocks").isJsonObject()) {
+				root.getAsJsonObject("blocks").entrySet().forEach(entry -> {
+					if (entry.getValue().isJsonPrimitive()) {
+						recording.blocks.put(entry.getKey(), entry.getValue().getAsString());
+					}
+				});
+			}
 			if (root.has("frames") && root.get("frames").isJsonArray()) {
 				for (JsonElement frameElement : root.getAsJsonArray("frames")) {
 					if (!frameElement.isJsonObject()) {
