@@ -17,13 +17,21 @@ jobs:
       - name: build
         run: |
           set -o pipefail
-          ./gradlew build --stacktrace --console=plain > build.log 2>&1 && echo BUILD_OK || {
-            echo "--- build failed, errors ---"
-            grep -n -m 40 -E "error:|FAILURE:|What went wrong|Caused by:|Could not|e: " build.log | head -60
-            echo "--- tail ---"
-            tail -n 100 build.log
+          ./gradlew build --stacktrace --console=plain 2>&1 | tee /tmp/build.log
+          status=${PIPESTATUS[0]}
+          if [ $status -ne 0 ]; then
+            { echo "### build errors"; grep -n -m 30 -E "error:|What went wrong|Caused by:" /tmp/build.log | head -40; echo; echo "### tail"; tail -n 25 /tmp/build.log; } | tee error-summary.txt
             exit 1
-          }
+          fi
+      - name: report errors
+        if: failure()
+        run: |
+          {
+            echo "## build failed"
+            echo '```'
+            cat error-summary.txt 2>/dev/null || echo "no summary"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: capture build artifacts
         uses: actions/upload-artifact@v4
         with:
