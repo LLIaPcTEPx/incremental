@@ -29,13 +29,22 @@ jobs:
           ./gradlew build --stacktrace --console=plain > /tmp/build.log 2>&1 || true
           tail -n 400 /tmp/build.log > ci-build-log.txt
           grep -q "BUILD SUCCESSFUL" /tmp/build.log
-      - name: publish log
+      - name: publish log and jar
         if: always()
         run: |
           git config user.email "ci@incremental"
           git config user.name "incremental-ci"
           git add -f ci-build-log.txt
-          git commit -m "ci: build log [skip ci]" || true
+          if [ -d build/libs ]; then
+            mkdir -p dist
+            rm -f dist/*.jar
+            for f in build/libs/*.jar; do
+              case "$f" in *-sources.jar|*-dev.jar) continue;; esac
+              cp "$f" dist/incremental.jar
+            done
+            git add -f dist/incremental.jar 2>/dev/null || true
+          fi
+          git commit -m "ci: build log and jar [skip ci]" || true
           git push || true
       - name: capture build artifacts
         if: success()
