@@ -62,14 +62,8 @@ jar {
 	}
 }
 
-remapJar {
-	// Keep the licence inside the distributable jar as well. The name is captured in a local
-	// variable: reaching for `project` inside the closure breaks the configuration cache.
-	def jarName = project.name
-	from("LICENSE") {
-		rename { "${it}_$jarName" }
-	}
-}
+// remapJar takes its contents from `jar`, so the licence from the block above ends up in the
+// distributable file as well; adding it again here would be a duplicate entry.
 
 publishing {
 	publications {
