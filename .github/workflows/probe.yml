@@ -1,7 +1,16 @@
 name: probe
-on: workflow_dispatch
+on:
+  push:
+    branches: [ arena/f9f59cdd-incremental ]
+    paths: [ '.github/workflows/probe.yml' ]
+  workflow_dispatch:
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - run: echo hello && java -version
+      - uses: actions/checkout@v4
+      - name: Hello
+        run: |
+          echo "hello from CI"
+          java -version
+          ./gradlew --version || true
