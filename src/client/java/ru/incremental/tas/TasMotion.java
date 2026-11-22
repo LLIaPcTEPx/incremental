@@ -3,7 +3,6 @@ package ru.incremental.tas;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.ClientInput;
 import net.minecraft.world.entity.player.Input;
-import net.minecraft.world.phys.Vec2;
 
 /**
  * Camera motion support. While recording the raw mouse delta produced by Minecraft itself is
@@ -64,11 +63,10 @@ public final class TasMotion {
 		client.player.turn(invertX ? -xo : xo, invertY ? -yo : yo);
 	}
 
-	/** Keeps the virtual input vector consistent with the injected key presses. */
+	/**
+	 * The vanilla input handler derives the movement vector from the key mappings it polls; the
+	 * recorded key flags are enough, so nothing else has to be pushed here.
+	 */
 	public static void applyMoveVector(ClientInput input, Input wanted) {
-		float forward = (wanted.forward() ? 1.0F : 0.0F) - (wanted.backward() ? 1.0F : 0.0F);
-		float left = (wanted.left() ? 1.0F : 0.0F) - (wanted.right() ? 1.0F : 0.0F);
-		Vec2 vector = new Vec2(left, forward).normalized();
-		input.setMoveVector(vector);
 	}
 }

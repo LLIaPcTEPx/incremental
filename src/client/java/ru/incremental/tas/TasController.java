@@ -61,11 +61,11 @@ public final class TasController {
 	public static void toggleRecordingPause() {
 		switch (TasSession.state()) {
 			case RECORDING -> {
-				TasSession.state = TasSession.State.RECORDING_PAUSED;
+				TasSession.setState(TasSession.State.RECORDING_PAUSED);
 				TasSession.flash("incremental.msg.rec_pause");
 			}
 			case RECORDING_PAUSED -> {
-				TasSession.state = TasSession.State.RECORDING;
+				TasSession.setState(TasSession.State.RECORDING);
 				TasSession.flash("incremental.msg.rec_resume");
 			}
 			default -> {
@@ -106,12 +106,12 @@ public final class TasController {
 	public static void togglePlaybackPause() {
 		switch (TasSession.state()) {
 			case PLAYING -> {
-				TasSession.state = TasSession.State.PLAY_PAUSED;
-				TasFreeze.freezeServer();
+				TasSession.setState(TasSession.State.PLAY_PAUSED);
+				TasFreeze.setFrozen(true);
 				TasSession.flash("incremental.msg.play_pause");
 			}
 			case PLAY_PAUSED -> {
-				TasSession.state = TasSession.State.PLAYING;
+				TasSession.setState(TasSession.State.PLAYING);
 				TasFreeze.unfreezeServer();
 				TasSession.flash("incremental.msg.play_resume");
 			}
@@ -124,7 +124,7 @@ public final class TasController {
 	public static void startPlaybackPaused(Recording recording) {
 		startPlayback(recording);
 		if (TasSession.state() == TasSession.State.PLAYING) {
-			TasSession.state = TasSession.State.PLAY_PAUSED;
+			TasSession.setState(TasSession.State.PLAY_PAUSED);
 			TasFreeze.setFrozen(true);
 			TasSession.flash("incremental.msg.play_pause");
 		}

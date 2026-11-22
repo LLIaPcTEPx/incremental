@@ -33,6 +33,10 @@ public final class TasSession {
 		return state;
 	}
 
+	static void setState(State newState) {
+		state = newState;
+	}
+
 	public static boolean isRecording() {
 		return state == State.RECORDING || state == State.RECORDING_PAUSED;
 	}
