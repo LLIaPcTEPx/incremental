@@ -165,7 +165,10 @@ public final class TasController {
 		// The replay has to start from the blocks the take was recorded on: remove what the take
 		// placed and restore what it broke. The run itself then re-creates those changes tick by
 		// tick, which is the familiar "world is cleaned, then the run plays it back" flow.
-		boolean restored = restoreBlocksFor(recording);
+		// Starting from the middle of a take is a different story: the world is not rewound to the
+		// pre-run state there, because the blocks of the skipped part would all be wrong. The
+		// player is teleported to the frame instead and the replay continues from the current world.
+		boolean restored = tick == 0 && restoreBlocksFor(recording);
 		TasSession.beginPlayback(tick);
 		TasPlaybackInput.install(Minecraft.getInstance());
 		if (Minecraft.getInstance().screen instanceof ru.incremental.screen.TasScreen) {

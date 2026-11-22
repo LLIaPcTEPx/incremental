@@ -74,10 +74,6 @@ public final class TasBlocks {
 		return player == null ? "" : player.level().dimension().identifier().toString();
 	}
 
-	public static boolean isEmpty() {
-		return ORIGINAL.isEmpty();
-	}
-
 	public static void clear() {
 		ORIGINAL.clear();
 		DIMENSIONS.clear();
