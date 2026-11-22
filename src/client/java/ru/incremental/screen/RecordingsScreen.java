@@ -61,7 +61,12 @@ public class RecordingsScreen extends TasScreen {
 
 		addRenderableWidget(button(recordLabel(), listX, y, third, 20, b -> {
 			if (TasSession.isRecording()) {
-				TasController.stopRecording();
+				if (TasSession.isRewindPaused()) {
+					// Continue from the cursor instead of dropping the paused take.
+					TasController.toggleRecordingPause();
+				} else {
+					TasController.stopRecording();
+				}
 			} else {
 				TasController.startRecording();
 			}
@@ -121,6 +126,9 @@ public class RecordingsScreen extends TasScreen {
 	private static Component recordLabel() {
 		if (!TasSession.isRecording()) {
 			return Component.translatable("incremental.button.record");
+		}
+		if (TasSession.isRewindPaused()) {
+			return Component.translatable("incremental.button.rec_continue");
 		}
 		return TasSession.state() == TasSession.State.RECORDING_PAUSED
 				? Component.translatable("incremental.msg.rec_resume")

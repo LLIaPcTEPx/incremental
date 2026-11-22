@@ -84,7 +84,9 @@ public final class TasHud {
 
 		String state = switch (TasSession.state()) {
 			case RECORDING -> Component.translatable("incremental.overlay.recording").getString();
-			case RECORDING_PAUSED -> Component.translatable("incremental.overlay.paused").getString();
+			case RECORDING_PAUSED -> (TasSession.isRewindPaused()
+					? Component.translatable("incremental.overlay.rewound").getString()
+					: Component.translatable("incremental.overlay.paused").getString());
 			case PLAYING -> Component.translatable("incremental.overlay.playing").getString();
 			case PLAY_PAUSED -> Component.translatable("incremental.overlay.play_paused").getString();
 			case IDLE -> "";
@@ -103,9 +105,10 @@ public final class TasHud {
 					Minecraft.getInstance().player.getY(),
 					Minecraft.getInstance().player.getZ()));
 		}
-		// The recording size is only useful while recording; keep the line short.
-		if (!TasSession.isRecording()) {
-			line.append(" / ").append(size);
+		line.append(" / ").append(size);
+		if (TasSession.isRewindPaused()) {
+			// "kept 340" tells the user the rest of the run is still there after a rewind.
+			line.append("  kept ").append(TasSession.framesAfterCursor());
 		}
 		return Component.literal(line.toString());
 	}

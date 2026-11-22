@@ -37,7 +37,11 @@ public final class TasController {
 			return;
 		}
 		if (TasSession.isRecording()) {
-			TasSession.flash("incremental.msg.recording");
+			// A take that was paused by rewinding continues from the cursor, which is what the
+			// record key means there; a take that is merely paused keeps its old meaning.
+			if (!TasStep.resumeRewoundTake()) {
+				TasSession.flash("incremental.msg.recording");
+			}
 			return;
 		}
 		if (TasSession.isPlaying()) {
@@ -49,12 +53,11 @@ public final class TasController {
 			TasSession.flash("incremental.msg.need_recording");
 			return;
 		}
-		// The take starts at the playhead: rewind to the frame you want to redo, load the matching
-		// save and record from there. Everything before that frame is kept, everything the new take
-		// covers is overwritten.
+		// The take starts at the playhead and overwrites frames in place. Nothing is deleted: the
+		// frames before the playhead are untouched and the frames after it stay in the recording
+		// until the new take grows long enough to reach them.
 		TasPlaybackInput.uninstall(Minecraft.getInstance());
-		TasSession.beginRecording(Math.min(TasSession.playhead(), recording.size()));
-		TasSession.truncateFromRecordingStart();
+		TasStep.beginRecording(Math.min(TasSession.playhead(), recording.size()));
 		TasFreeze.setFrozen(false);
 		if (client().mouseHandler != null && client().screen == null && !client().mouseHandler.isMouseGrabbed()) {
 			client().mouseHandler.grabMouse();
@@ -64,16 +67,29 @@ public final class TasController {
 		LocalPlayer player = client().player;
 		String where = player == null ? ""
 				: String.format(java.util.Locale.ROOT, "  @  %.1f / %.1f / %.1f", player.getX(), player.getY(), player.getZ());
-		TasSession.flash("incremental.msg.rec_start", Component.literal(recording.name + where));
+		int kept = TasSession.framesAfterCursor();
+		if (kept > 0) {
+			// Say it out loud: the tail is kept, not deleted, which is what "continue recording after
+			// a rewind" means.
+			TasSession.flash("incremental.msg.rec_start_kept", Component.literal(recording.name + where), kept);
+		} else {
+			TasSession.flash("incremental.msg.rec_start", Component.literal(recording.name + where));
+		}
 	}
 
 	public static void stopRecording() {
 		if (!TasSession.isRecording()) {
 			return;
 		}
+		boolean wasRewound = TasSession.isRewindPaused();
 		Recording recording = TasSession.selected();
 		int ticks = recording == null ? 0 : recording.size();
 		TasSession.stopRecording();
+		TasStep.resetRewind();
+		if (wasRewound) {
+			// The rewind-paused take froze the world; stopping it must give the game back.
+			TasFreeze.unfreeze();
+		}
 		if (recording != null) {
 			RecordingStorage.save(recording);
 		}
@@ -87,6 +103,12 @@ public final class TasController {
 				TasSession.flash("incremental.msg.rec_pause");
 			}
 			case RECORDING_PAUSED -> {
+				if (TasStep.resumeRewoundTake()) {
+					// A take paused by rewinding continues from the cursor, not from where it
+					// stopped, and unfreezes the world.
+					TasFreeze.setFrozen(false);
+					return;
+				}
 				TasSession.setState(TasSession.State.RECORDING);
 				TasSession.flash("incremental.msg.rec_resume");
 			}
@@ -107,7 +129,11 @@ public final class TasController {
 			return;
 		}
 		if (TasSession.isRecording()) {
-			TasSession.flash("incremental.msg.recording");
+			// A take that was paused by rewinding continues from the cursor, which is what the
+			// record key means there; a take that is merely paused keeps its old meaning.
+			if (!TasStep.resumeRewoundTake()) {
+				TasSession.flash("incremental.msg.recording");
+			}
 			return;
 		}
 		Recording recording = TasSession.selected();

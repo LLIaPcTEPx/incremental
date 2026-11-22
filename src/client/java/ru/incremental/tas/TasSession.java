@@ -25,6 +25,11 @@ public final class TasSession {
 	private static int playhead;
 	/** Frame index the current take writes to; frames before it are kept untouched. */
 	private static int recordCursor;
+	/**
+	 * Recording was paused because the user rewound. The world is frozen while this is set and the
+	 * take continues as soon as the playhead catches up with the write position again.
+	 */
+	private static boolean rewindPaused;
 
 	private TasSession() {
 	}
@@ -81,6 +86,7 @@ public final class TasSession {
 	public static void select(Recording recording) {
 		selectedName = recording == null ? null : recording.name;
 		playhead = 0;
+		rewindPaused = false;
 	}
 
 	/** Called after a rename so the selection follows the new name. */
@@ -96,22 +102,36 @@ public final class TasSession {
 	static void beginRecording(int fromTick) {
 		recordCursor = Math.max(0, fromTick);
 		playhead = recordCursor;
+		rewindPaused = false;
 		state = State.RECORDING;
 	}
 
-	/** Called when a take starts: frames after the take's first frame are stale and get dropped. */
-	static void truncateFromRecordingStart() {
+	/**
+	 * Number of frames that already exist after the write position. A take never deletes them: the
+	 * new frames overwrite the old ones in place and anything past the end of the take is kept, so
+	 * recording from a rewound point does not eat the rest of the run.
+	 */
+	public static int framesAfterCursor() {
 		Recording recording = selected();
-		if (recording == null) {
-			return;
-		}
-		while (recording.size() > recordCursor) {
-			recording.remove(recording.size() - 1);
-		}
+		return recording == null ? 0 : Math.max(0, recording.size() - recordCursor);
 	}
 
 	public static int recordCursor() {
 		return recordCursor;
+	}
+
+	static void setRecordCursor(int tick) {
+		recordCursor = Math.max(0, tick);
+		playhead = recordCursor;
+	}
+
+	/** True while the take is paused because the user rewound through it. */
+	public static boolean isRewindPaused() {
+		return rewindPaused;
+	}
+
+	static void setRewindPaused(boolean value) {
+		rewindPaused = value;
 	}
 
 	static void advanceRecordCursor() {
@@ -120,15 +140,18 @@ public final class TasSession {
 	}
 
 	static void stopRecording() {
+		rewindPaused = false;
 		state = State.IDLE;
 	}
 
 	static void beginPlayback(int fromTick) {
 		playhead = Math.max(0, fromTick);
+		rewindPaused = false;
 		state = State.PLAYING;
 	}
 
 	static void stopPlayback() {
+		rewindPaused = false;
 		state = State.IDLE;
 		playhead = 0;
 	}
@@ -137,6 +160,7 @@ public final class TasSession {
 	public static void worldUnloaded() {
 		TasFreeze.unfreeze();
 		TasFreeze.reset();
+		rewindPaused = false;
 		state = State.IDLE;
 		playhead = 0;
 	}

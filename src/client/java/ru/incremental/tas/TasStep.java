@@ -11,11 +11,22 @@ import net.minecraft.client.Minecraft;
  * take shows the same places it was recorded at. Block state and entities are not rewound — the world
  * itself cannot be un-ticked — but the player is always where the take says, which is what frame
  * editing needs.</p>
+ *
+ * <p><b>Rewinding during a take.</b> Stepping back while recording pauses the take, freezes the
+ * world and pins the write position to the playhead. From there the cursor can be moved freely in
+ * both directions and shown poses can be inspected. Stepping forward to the frame where the take was
+ * paused (or starting the recording again with the record hotkey) resumes it; everything that was
+ * already recorded is kept, so a rewind never deletes the rest of the run.</p>
  */
 public final class TasStep {
 	private static RecordedFrame armedFrame;
 	private static boolean armedFramePending;
 	private static boolean awaitingTick;
+	/**
+	 * Playhead the take was at when the user rewound into it. This is where the cursor has to get
+	 * back to before recording continues.
+	 */
+	private static int rewindReturnTick = -1;
 
 	private TasStep() {
 	}
@@ -58,6 +69,13 @@ public final class TasStep {
 		armedFrame = null;
 		armedFramePending = false;
 		awaitingTick = false;
+		resetRewind();
+	}
+
+	/** Forgets the rewind bookkeeping (the session flag is cleared separately). */
+	public static void resetRewind() {
+		rewindReturnTick = -1;
+		TasSession.setRewindPaused(false);
 	}
 
 	/** Called once per client tick to notice when the requested tick has run. */
@@ -74,8 +92,43 @@ public final class TasStep {
 		Recording recording = TasSession.selected();
 		if (recording != null) {
 			TasSession.setPlayhead(Math.min(recording.size(), TasSession.playhead() + 1));
+			if (TasSession.isRewindPaused()) {
+				// The stepped frame is the new write position.
+				TasSession.setRecordCursor(TasSession.playhead());
+			}
 			TasSession.flash("incremental.msg.frame", TasSession.playhead(), recording.size());
 		}
+	}
+
+	// ------------------------------------------------------------ rewind state
+
+	/**
+	 * True when the take is paused because the user rewound into it. Reading it through TasSession
+	 * keeps the flag in one place, this helper only documents where it comes from.
+	 */
+	public static boolean rewindPaused() {
+		return TasSession.isRewindPaused();
+	}
+
+	/** Called when a take starts (record hotkey or the record button). */
+	static void beginRecording(int writePosition) {
+		rewindReturnTick = -1;
+		TasSession.setRewindPaused(false);
+		TasSession.beginRecording(writePosition);
+	}
+
+	/**
+	 * Ends the rewind-paused state: the take continues writing at the given position.
+	 *
+	 * @param writePosition frame the next captured tick is written to
+	 */
+	private static void resumeTake(int writePosition) {
+		rewindReturnTick = -1;
+		TasSession.setRewindPaused(false);
+		TasSession.setRecordCursor(writePosition);
+		TasSession.setState(TasSession.State.RECORDING);
+		TasFreeze.setFrozen(false);
+		TasSession.flash("incremental.msg.rec_resume");
 	}
 
 	// ------------------------------------------------------------ actions
@@ -88,6 +141,10 @@ public final class TasStep {
 			return;
 		}
 		if (!TasSession.isPlaying()) {
+			if (TasSession.isRewindPaused()) {
+				stepForwardWhileRewound(recording, frames);
+				return;
+			}
 			moveCursor(recording, frames, true);
 			return;
 		}
@@ -101,6 +158,27 @@ public final class TasStep {
 			return;
 		}
 		stepOneTick(recording);
+	}
+
+	/**
+	 * Moving forward while a rewound take waits for the cursor: the cursor moves first, and the take
+	 * resumes on its own once it reaches the position where it was paused.
+	 */
+	private static void stepForwardWhileRewound(Recording recording, int frames) {
+		int target = Math.min(recording.size(), TasSession.playhead() + frames);
+		TasSession.setPlayhead(target);
+		if (target > 0) {
+			previewPose(recording.get(target - 1));
+		}
+		TasSession.setRecordCursor(target);
+
+		if (rewindReturnTick >= 0 && target >= rewindReturnTick) {
+			resumeTake(target);
+			return;
+		}
+		// Still before the pause point: keep the take paused and the world frozen.
+		TasFreeze.setFrozen(true);
+		TasSession.flash("incremental.msg.frame", target, recording.size());
 	}
 
 	private static void stepOneTick(Recording recording) {
@@ -131,7 +209,26 @@ public final class TasStep {
 		if (TasSession.isPlayingActive()) {
 			TasController.togglePlaybackPause();
 		}
+		// Rewinding while a take runs pauses it, like scrubbing a timeline: the world freezes, the
+		// write position follows the cursor and recording resumes as soon as the cursor is moved
+		// forward to the point where the take stopped.
+		boolean firstRewind = !TasSession.isRewindPaused() && TasSession.isRecording();
+		if (firstRewind) {
+			// `isRecording()` covers both "capturing" and "already paused with C": either way a
+			// rewind from now on owns the write position.
+			rewindReturnTick = TasSession.recordCursor();
+			TasSession.setState(TasSession.State.RECORDING_PAUSED);
+			TasSession.setRewindPaused(true);
+		}
 		moveCursor(recording, -frames, false);
+		if (TasSession.isRewindPaused()) {
+			TasSession.setRecordCursor(TasSession.playhead());
+			TasFreeze.setFrozen(true);
+			if (firstRewind) {
+				// Only on the first rewind: the take is now paused and the tail is still there.
+				TasSession.flash("incremental.msg.rec_rewound", TasSession.playhead(), recording.size());
+			}
+		}
 	}
 
 	private static void moveCursor(Recording recording, int delta, boolean forward) {
@@ -158,5 +255,14 @@ public final class TasStep {
 		if (frame.hotbar >= 0 && frame.hotbar < 9) {
 			client.player.getInventory().setSelectedSlot(frame.hotbar);
 		}
+	}
+
+	/** Whether the record hotkey should continue a rewound take instead of starting a new one. */
+	public static boolean resumeRewoundTake() {
+		if (!TasSession.isRewindPaused()) {
+			return false;
+		}
+		resumeTake(TasSession.playhead());
+		return true;
 	}
 }
